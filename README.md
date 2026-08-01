@@ -2,15 +2,15 @@
 
 # Traceback
 
-### AI-assisted digital forensics
+### An evidence-based security gate for npm packages installed by AI coding agents
 
-**Security teams do not lack alerts. They lack a trustworthy explanation of what happened.**
+**Your agent asks permission to run `npm install`. That permission does not cover
+the code npm runs on the package's behalf.**
 
-An evidence-based security gate for npm packages installed by AI coding agents.
-Traceback runs a package's install hook in an isolated sandbox, records what it
-actually does, and returns **ALLOW / REVIEW / BLOCK** — where every claim is
-labelled **FACT**, **CORRELATION**, or **INFERENCE** and links back to the raw
-events it came from.
+Traceback executes a package's install hook in an isolated sandbox, records what
+it actually does, and returns **ALLOW / REVIEW / BLOCK** — where every claim is
+labelled **FACT**, **CORRELATION**, or **INFERENCE** and cites the raw events it
+came from.
 
 _Do not trust what the package says. Observe what it does._
 
@@ -23,153 +23,168 @@ _Do not trust what the package says. Observe what it does._
 
 ## The problem
 
-When something breaks at 3am, an investigator is handed a pile of disconnected
-records: a process started here, a file was read there, a request went out, a
-config file changed. Each line is true. None of them say what happened.
+An AI coding agent asks before it runs a command:
 
-Reconstructing the story is slow, manual, and the part that actually requires
-judgement. So the obvious move is to point a language model at the logs — and
-that fails, for a specific reason: **a summary cannot tell you how much of itself
-to believe.** It states a guess and an observation in the same confident voice.
-In forensics, that is worse than no answer, because a wrong conclusion sends the
-response in the wrong direction.
+```
+Cursor wants to run:  npm install analytics-helper
+```
 
-Traceback's premise is that the useful unit of work is not a summary. It is a
-**claim you can audit**.
+You approve installing a package. But npm doesn't just download files — it runs
+code the package author wrote, automatically, as part of installing:
+
+```json
+{ "scripts": { "postinstall": "node postinstall.js" } }
+```
+
+That script is ordinary code on your machine. It can spawn processes, read
+`.env` or `~/.ssh`, make outbound requests, and rewrite `.github/workflows`.
+None of that appeared in the prompt you approved. And it can arrive through a
+dependency of a dependency, where nothing at the top level looks unusual.
+
+So the approval answers _"may I run this command?"_ — when the question that
+matters is **"what will the third-party code triggered by this command actually
+do?"**
 
 ## What it does
 
-Feed it six unremarkable events from a developer machine:
+Six unremarkable events from an install, captured in the sandbox:
 
 ```
-process_start   npm install unknown-analytics-helper@1.4.2       pid 1001
-process_start   node postinstall.js                              pid 1002 ← parent 1001
-file_read       /app/.env                                        pid 1002
-network_out     httpbin.org  POST                                pid 1002
-file_write      /app/deploy.yml                                  pid 1002
-git_modify      .github/workflows/deploy.yml                     pid 1002
+process_start   npm install unknown-analytics-helper@1.4.2   pid 5
+process_start   node postinstall.js                          pid 7  ← parent 5
+file_read       /app/.env                                    pid 7
+network_out     …traceback-sim-collector.modal.run           pid 7
+file_write      /app/deploy.yml                              pid 7
+git_modify      .github/workflows/deploy.yml                 pid 7
 ```
 
-It returns a timeline across five attack phases. Here is one phase, taken from
-real output (line-wrapped to fit, otherwise unedited):
+Each line is true. None of them, alone, says what happened. Traceback returns a
+decision — this is verbatim output, only line-wrapped:
 
 ```
-### exfiltration — Outbound request following credential access
+## Verdict
 
-3 findings in this phase (FACT, CORRELATION, INFERENCE).
-
-- [FACT] Outbound request to httpbin.org  (confidence: high)
-    node postinstall.js (pid 1002) made an outbound POST request to
-    httpbin.org (completed).
-    └ evidence 4a7f21c8
-
-- [CORRELATION] Outbound request immediately followed a credential-file read
-    (confidence: high)
-    An outbound request to httpbin.org occurred 320ms after node postinstall.js
-    (pid 1002) read /app/.env. Both events originate from the same process tree
-    and the same user (dev-agent).
-    └ evidence 9c1b04de · 4a7f21c8
-
-- [INFERENCE] Possible credential exfiltration  (confidence: medium, T1041)
-    A process read a credential file and then contacted an external host within
-    the same second, from the same process tree. That sequence is consistent
-    with the credential being transmitted off-host. The request body was not
-    captured, so transmission of the secret is not directly observed.
-    └ evidence 9c1b04de · 4a7f21c8
-    ⚠ Requires human confirmation. Confirm by inspecting the outbound request
-      body or egress proxy logs.
-```
-
-Read what those three labels are doing. The fact is what the machine saw. The
-correlation is the link it drew, with the reasoning stated. The inference is a
-hypothesis — and it says out loud what it could _not_ observe, then tells the
-investigator exactly how to settle it.
-
-**The 320ms is measured**, not written by a model. It falls out of comparing two
-real timestamps.
-
-And it ends with a decision a developer can act on:
-
-```
 BLOCK — high risk. A synthetic credential was read and observed leaving the sandbox.
 
-  [FACT] Synthetic credential was transmitted externally
-  [FACT] Deployment configuration modified by a lifecycle script
+Why:
+- [FACT] Synthetic credential was transmitted externally — The canary value
+  TRACEBACK_CANARY_a91f4c27, seeded into the credential file before the install
+  ran, was observed in the payload node postinstall.js (pid 7) sent to
+  …traceback-sim-collector.modal.run. Transmission is directly observed here,
+  not inferred from timing.
+- [FACT] Deployment or build configuration modified by a lifecycle script —
+  Modified /app/deploy.yml, .github/workflows/deploy.yml.
 
-  Confirmed      The seeded canary appeared in the payload sent to an external host.
-                 Build/deploy files written: .github/workflows/deploy.yml
-  Not confirmed  Whether those changes were committed, pushed, or later executed.
+Confirmed:
+- The seeded canary value appeared in the payload sent to an external host.
+- Build/deploy files written: /app/deploy.yml, .github/workflows/deploy.yml.
+
+Not confirmed:
+- Whether those changes were committed, pushed, or executed by a later deployment.
 ```
 
-The verdict is **rule-based, not model-generated** — a developer deciding whether
-to let third-party code run on their machine should be able to read the rule that
-produced the answer and get the same answer twice.
+Underneath sits the full timeline: **7 FACTs, 3 CORRELATIONs, 2 INFERENCEs**,
+each citing the evidence beneath it, every inference carrying a note describing
+what would settle it.
+
+## The idea: rank claims by how much they assert
+
+One label per level of certainty, so a reader never has to guess how much the
+system is claiming.
+
+| Label           | Means                                                   |
+| --------------- | ------------------------------------------------------- |
+| **FACT**        | Directly observed in telemetry.                         |
+| **CORRELATION** | Observations linked by time, process tree, or user.     |
+| **INFERENCE**   | A hypothesis about intent. Requires human confirmation. |
+
+Then the escalation that makes it more than labelling. Normally _"was the secret
+actually sent?"_ is unanswerable from timing alone, so exfiltration stays an
+INFERENCE. But the sandbox seeds a **canary** — a recognisable synthetic token —
+into the credential file before the install runs. If that exact token appears in
+what leaves the container, transmission is _observed_:
+
+```
+INFERENCE  Possible credential exfiltration (medium)   ← without the canary
+FACT       Synthetic credential was transmitted off-host (high)   ← with it
+```
+
+And when the FACT appears, **the system withdraws the inference** rather than
+leaving a guess sitting next to the proof.
 
 ## Why this isn't "AI that summarises logs"
 
-Four properties, each enforced in code rather than requested in a prompt:
+Five properties, each enforced in code rather than requested in a prompt:
 
-**1 · Claims are ranked by how much they're asserting.**
+**1 · Evidence outranks assertion.**
 An INFERENCE cannot exist unless a CORRELATION supports it, and a CORRELATION
-cannot exist without the FACTs beneath it. Remove the evidence and the conclusion
-disappears with it — that is a structural rule in the pipeline, and it has a test.
+cannot exist without FACTs beneath it. Remove the evidence and the conclusion
+disappears with it. That is a structural rule, and it has a test.
 
 **2 · The model cannot invent events.**
-The language model never sees raw telemetry. It receives findings that were
-already derived by deterministic rules, and may only reference them by id. Every
-id it returns is checked against the set it was given; anything else is discarded
-before a single row is written. It arranges the story — it cannot add to it.
+The language model never sees raw telemetry. It receives findings already derived
+by deterministic rules and may only reference them by id. Every id it returns is
+checked against the set it was given; anything else is discarded before a single
+row is written. It arranges the story — it cannot add to it.
 
-**3 · The machine never confirms its own hypothesis.**
-Every INFERENCE ships unconfirmed, with a note describing the evidence that would
-settle it. Only a human click marks it confirmed. The system is built to be
-_checked_, not trusted.
+**3 · The verdict is rule-based, not model-generated.**
+A developer deciding whether to let third-party code run on their machine should
+be able to read the rule that produced the answer, and get the same answer twice.
+The model writes prose; it does not decide.
 
-**4 · Supply-chain patterns are named, not just described.**
-When a dependency install is followed by credential access, an outbound request,
-and a change to deployment config, the system says so explicitly — naming the
-package, the install hook, the secret touched, and the file that would keep
-executing after the package is removed. It deliberately does **not** fire on an
-install plus a lifecycle hook alone: that is how half of npm works, and a
-detector that cries wolf on it is useless.
+**4 · The machine never confirms its own hypothesis.**
+Every INFERENCE ships unconfirmed with a note describing what would settle it.
+Only a human click marks it confirmed.
 
-**5 · It says when it doesn't know.**
-Every report ends with open questions — the things the evidence does not answer.
-The first one is usually that the request body was never captured, so
-exfiltration remains inferred. A tool that hides its uncertainty is more
-dangerous than one that has none.
+**5 · It says what it could not establish.**
+Every verdict carries a "Not confirmed" list — **including ALLOW**, which states
+that only the behaviour exercised during this run was observed. A gate that hides
+its uncertainty is more dangerous than one that has none.
+
+## How this differs from what already exists
+
+**vs. an agent permission prompt.** The prompt asks _"should this command run?"_
+Traceback asks _"what does the third-party code triggered by that command do?"_
+It protects against the indirect execution, not the command.
+
+**vs. a static package scanner.** Static analysis reads the source: `fs.readFile`,
+`fetch`, `eval`, obfuscation. But code can be obfuscated, can behave differently
+by environment, can fetch a second-stage payload, and can hide the behaviour in a
+dependency. Traceback observes what the package _did_ when it ran. The two signals
+combine well; this is the dynamic half.
 
 ## What's real, and what's simulated
 
 Worth being precise about, since "AI security demo" invites suspicion:
 
-| Component                | Status                                                                                                                                |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| The attack               | **Simulated**, in a disposable cloud sandbox. Synthetic secret, harmless endpoint, unresolvable exfil host. Nothing real is touched.  |
-| The telemetry            | **Real.** Actual processes, file reads, and an outbound request — timestamped when they occurred, which is why the 320ms is measured. |
-| The correlation pipeline | **Real**, deterministic, and unit-tested — including the negative cases.                                                              |
-| The timeline text        | **Written by an LLM**, constrained as described above. Falls back to a rule engine with no API key.                                   |
-| Multi-host correlation   | **Not built.** Single host only.                                                                                                      |
-| Authentication           | **Not built.** Suitable for local evaluation, not deployment.                                                                         |
+| Component                       | Status                                                                                                                |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| The attack                      | **Simulated** in a disposable Modal sandbox, using a synthetic canary. No real credential or system is touched.       |
+| The telemetry                   | **Real** — actual processes, real parent/child pids, real file I/O, a real outbound request, timestamped when it ran. |
+| The correlation                 | **Real**, deterministic, unit-tested including negative cases.                                                        |
+| The canary proof                | **Real** — a collector we control confirms what it received, so the proof does not rest on a third party.             |
+| The verdict                     | **Real**, rule-based and reproducible.                                                                                |
+| The timeline prose              | **Written by an LLM**, constrained as above. Falls back to a rule engine with no API key.                             |
+| Syscall capture                 | **Not built.** Telemetry is self-reported by the simulation, not captured from the kernel.                            |
+| `--ignore-scripts` interception | **Not built.** The sandbox path is real; local interception is the next step.                                         |
+| Authentication                  | **Not built.** Suitable for local evaluation, not deployment.                                                         |
 
 ## Where it's weak
 
-Stated plainly, because a forensics tool that hides its limits has missed its own
+Stated plainly, because a security tool that hides its limits has missed its own
 point:
 
 - **Transmission is proven only via a canary the sandbox controls.** Against a
-  package that encrypts or encodes what it sends, the canary would not appear
-  and exfiltration would fall back to an INFERENCE — the system under-claims
-  rather than over-claims, which is the correct direction to fail.
-- **Telemetry is self-reported by the simulation**, not captured from the
-  kernel. `strace` syscall capture is the next step and would make the evidence
-  independent of the script's own account of itself.
+  package that encrypts or encodes what it sends, the canary would not appear and
+  exfiltration would fall back to an INFERENCE — the system under-claims rather
+  than over-claims, which is the correct direction to fail.
+- **Telemetry is self-reported by the simulation**, not captured from the kernel.
+  `strace` syscall capture (`openat` / `read` / `connect`) is the next step and
+  would make the evidence independent of the script's own account of itself.
 - **MITRE ATT&CK mappings are approximate** — orientation for a reader, not
   suitable for formal reporting.
 - **Correlation windows are tuned to this scenario** (2s exfiltration, 30s
   persistence). Real telemetry needs per-environment calibration.
-- **The LLM only arranges findings.** It cannot promote an inference to a fact,
-  but it also contributes no hypotheses of its own yet.
 - **One host, one session.** No cross-host or cross-session correlation.
 
 ## Try it
@@ -182,38 +197,39 @@ bun run dev:all          # API on :8787, UI on :5173
 
 Open **<http://localhost:5173/traceback>**, then:
 
-1. **Run simulation** — shows the six raw events, uninterpreted. This is the
-   "before" state on purpose.
-2. **Build timeline** — the same events, now a timeline. Expand a phase to see
-   its findings and the evidence under each.
-3. **Confirm** an inference. That click is the human step the whole design exists
-   to protect.
+1. **Run simulation** — shows the raw events, uninterpreted. The "before" state,
+   on purpose.
+2. **Build timeline** — the verdict, the supply-chain indicators, and the same
+   events as a timeline. Expand a phase to see its findings and their evidence.
+3. **Confirm** an inference. That click is the human step the design exists to
+   protect.
 
 Only Supabase is required. Without Modal it uses a local telemetry fixture;
 without an OpenAI key a rule engine builds the timeline. Both fallbacks are
 labelled in the interface — a fallback run is never presented as the real thing.
 
-Full walkthrough, troubleshooting, and configuration:
-**[docs/traceback/SETUP.md](docs/traceback/SETUP.md)**
+Full walkthrough and troubleshooting: **[docs/traceback/SETUP.md](docs/traceback/SETUP.md)**
 
 ## How it works
 
 ```
-sandbox ──► raw events ──► evidence ──► findings ──► timeline ──► report
-            (stored,       (plain       (FACT /       (LLM,        (markdown
-             immutable)     facts)     CORRELATION /  constrained)  + JSON)
-                                        INFERENCE)
+sandbox ──► raw events ──► evidence ──► findings ──► verdict
+            (stored,       (plain       (FACT /      (rules)
+             immutable)     facts)     CORRELATION /
+                                        INFERENCE)      └──► timeline + report
+                                                              (LLM, constrained)
 ```
 
 Each stage may only cite the one before it. Raw events are never mutated —
 re-running the analysis replaces the interpretation, never the ground truth.
 
 The correlation stage is pure functions over plain data, so its rules are tested
-directly: window boundaries, process-tree ancestry, and the invariant that an
+directly: window boundaries, process-tree ancestry, the canary escalation, the
+threshold that stops it firing on ordinary installs, and the invariant that an
 inference never appears without a correlation beneath it.
 
 ```bash
-bun run verify    # lint + typecheck + format + 27 tests + build
+bun run verify    # lint + typecheck + format + 48 tests + build
 ```
 
 Architecture and safety model: **[docs/traceback/README.md](docs/traceback/README.md)**
@@ -221,13 +237,26 @@ Status and roadmap: **[docs/todo.md](docs/todo.md)**
 
 ## What's next
 
-- Ingestion adapters for real EDR and SIEM sources. The pipeline consumes
+- **`npm install --ignore-scripts` interception** — detect lifecycle scripts from
+  `package.json` and inspect them before anything executes locally.
+- **`strace` syscall capture** so evidence comes from the kernel rather than from
+  the script being observed.
+- Authentication on `/api/*`, required before any deployment.
+- Ingestion adapters for real EDR and SIEM sources — the pipeline consumes
   normalised events, so this is an adapter, not a rewrite.
-- Capture request bodies at the egress boundary — turning the exfiltration
-  inference into a fact.
-- Multi-host and multi-session correlation.
 - Persist analyst decisions as signal: which inferences were confirmed, which
-  were rejected, and why.
+  rejected, and why.
+
+## Safety
+
+All suspicious behaviour is simulated inside an isolated sandbox using synthetic
+secrets. No real credentials or external systems are accessed. The "secret" is a
+canary token with no power anywhere; the exfiltration destination is a collector
+we operate; the generated workflow targets `exfil.invalid`, a reserved TLD that
+cannot resolve.
+
+Secrets stay server-side: the browser holds no keys and talks only to `/api/*`.
+Row Level Security is enabled on every table with no permissive policies.
 
 ## Built with
 
