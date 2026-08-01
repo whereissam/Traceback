@@ -58,25 +58,38 @@ curl -s -X POST localhost:8787/api/inspect \
 5. Runs esbuild's install hook under `strace`, recording every syscall
 6. Turns those syscalls into normalised events and stores them
 
-It replies with:
+It replies with the full record it just created — note the
+`investigation.id`, you need it for the next step:
 
 ```json
 {
-  "investigation": { "id": "3ff94fed-…" },
+  "investigation": {
+    "id": "d5eed23d-d8fa-40eb-8c71-a0599498e0af",
+    "title": "esbuild@0.28.1 — install-hook inspection",
+    "status": "open",
+    "created_at": "2026-08-01T15:41:05.802534+00:00"
+  },
   "package": "esbuild",
   "version": "0.28.1",
   "lifecycle_scripts": { "postinstall": "node install.js" },
-  "event_count": 3
+  "has_lifecycle_scripts": true,
+  "event_count": 3,
+  "telemetry_source": "modal",
+  "note": null
 }
 ```
 
-So: esbuild **does** declare an install hook, and running it produced **3
-observable events**. Nothing has been judged yet.
+Reading that back: esbuild **does** declare an install hook
+(`postinstall: node install.js`), running it produced **3 observable events**,
+and the telemetry came from a real Modal sandbox rather than the local fallback.
+Nothing has been judged yet.
 
 ### Then analyse it
 
+Take the `id` from above and pass it to the analysis endpoint:
+
 ```bash
-curl -s -X POST localhost:8787/api/investigate/3ff94fed-…
+curl -s -X POST localhost:8787/api/investigate/d5eed23d-d8fa-40eb-8c71-a0599498e0af
 ```
 
 **What this does**: reads those stored events, derives evidence, applies the
@@ -88,6 +101,18 @@ correlation rules, computes a verdict, and asks the model to write the prose.
   "verdict": "allow",
   "risk": "low"
 }
+```
+
+### Both steps in one go
+
+If you would rather not copy the id by hand:
+
+```bash
+ID=$(curl -s -X POST localhost:8787/api/inspect \
+  -H 'content-type: application/json' \
+  -d '{"package":"esbuild"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["investigation"]["id"])')
+
+curl -s -X POST "localhost:8787/api/investigate/$ID" | python3 -m json.tool
 ```
 
 ---
