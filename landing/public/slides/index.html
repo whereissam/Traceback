@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Traceback — pitch</title>
+    <meta name="color-scheme" content="only light" />
     <style>
       /* ===========================================
          VIEWPORT FITTING: MANDATORY BASE
@@ -217,6 +218,116 @@
         margin-bottom: 0.25rem;
       }
 
+      /* pipeline diagram */
+      .pipe {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        margin: clamp(0.5rem, 2vh, 1.2rem) 0;
+      }
+      .step {
+        flex: 1;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 0.6rem;
+        padding: clamp(0.5rem, 1.5vh, 0.85rem) 0.5rem;
+        text-align: center;
+        min-width: 0;
+      }
+      .step .k {
+        font-size: clamp(0.56rem, 1.05vw, 0.7rem);
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        display: block;
+        margin-bottom: 0.25rem;
+      }
+      .step .v {
+        font-size: clamp(0.6rem, 1.15vw, 0.78rem);
+        color: var(--muted);
+        line-height: 1.35;
+      }
+      .chev {
+        display: flex;
+        align-items: center;
+        color: var(--primary);
+        font-weight: 700;
+        padding: 0 clamp(0.2rem, 0.7vw, 0.5rem);
+        font-size: clamp(0.8rem, 1.6vw, 1.1rem);
+      }
+      .who {
+        display: flex;
+        gap: clamp(0.4rem, 1.2vw, 0.9rem);
+        margin-top: clamp(0.4rem, 1.4vh, 0.9rem);
+      }
+      .who div {
+        flex: 1;
+        font-size: clamp(0.62rem, 1.2vw, 0.82rem);
+        color: var(--muted);
+        border-top: 2px solid var(--border);
+        padding-top: 0.4rem;
+      }
+      .who b {
+        display: block;
+        color: var(--ink);
+        font-size: clamp(0.66rem, 1.25vw, 0.85rem);
+      }
+      @media (max-width: 760px) {
+        .pipe {
+          flex-direction: column;
+        }
+        .chev {
+          justify-content: center;
+          transform: rotate(90deg);
+          padding: 0.15rem 0;
+        }
+        .who {
+          flex-direction: column;
+        }
+      }
+
+      .lane {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: clamp(0.5rem, 1.6vw, 1rem);
+        align-items: start;
+        margin-bottom: clamp(0.45rem, 1.5vh, 0.9rem);
+      }
+      .pill {
+        font-size: clamp(0.52rem, 1vw, 0.66rem);
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        padding: 0.2rem 0.5rem;
+        border-radius: 999px;
+        white-space: nowrap;
+        margin-top: 0.15rem;
+      }
+      .built {
+        color: var(--fact);
+        background: color-mix(in srgb, var(--fact) 15%, transparent);
+      }
+      .next {
+        color: var(--inference);
+        background: color-mix(in srgb, var(--inference) 15%, transparent);
+      }
+      .lane h3 {
+        margin: 0 0 0.15rem;
+        font-size: clamp(0.82rem, 1.6vw, 1.02rem);
+      }
+      .lane p {
+        margin: 0 0 0.3rem;
+        font-size: clamp(0.68rem, 1.32vw, 0.88rem);
+      }
+      .lane code {
+        display: inline-block;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 0.35rem;
+        padding: 0.16rem 0.45rem;
+        font-size: clamp(0.62rem, 1.18vw, 0.8rem);
+        color: var(--ink);
+      }
+
       .arrow {
         color: var(--primary);
         font-weight: 700;
@@ -284,7 +395,7 @@
 
   <body>
     <div class="progress" id="progress"></div>
-    <nav class="idx"><span id="cur">1</span> / <span id="tot">9</span></nav>
+    <nav class="idx"><span id="cur">1</span> / <span id="tot">11</span></nav>
 
     <main>
       <!-- 1 · title -->
@@ -324,7 +435,115 @@
         </div>
       </section>
 
-      <!-- 3 · raw telemetry -->
+
+      <!-- 3 · how it works -->
+      <section class="slide">
+        <div class="inner">
+          <div class="eyebrow reveal">How it works</div>
+          <h2 class="reveal">The hook runs in a sandbox, never on your machine</h2>
+
+          <div class="pipe reveal">
+            <div class="step">
+              <span class="k" style="color: var(--primary)">1 · Intercept</span>
+              <span class="v">Install with scripts disabled locally</span>
+            </div>
+            <div class="chev">&rsaquo;</div>
+            <div class="step">
+              <span class="k" style="color: var(--primary)">2 · Detonate</span>
+              <span class="v">Run the hook in an isolated sandbox with a seeded canary</span>
+            </div>
+            <div class="chev">&rsaquo;</div>
+            <div class="step">
+              <span class="k" style="color: var(--primary)">3 · Record</span>
+              <span class="v">Processes, file reads, outbound requests</span>
+            </div>
+            <div class="chev">&rsaquo;</div>
+            <div class="step">
+              <span class="k" style="color: var(--primary)">4 · Correlate</span>
+              <span class="v">Process tree, timing, same user</span>
+            </div>
+            <div class="chev">&rsaquo;</div>
+            <div class="step">
+              <span class="k" style="color: var(--danger)">5 · Decide</span>
+              <span class="v">ALLOW / REVIEW / BLOCK</span>
+            </div>
+          </div>
+
+          <div class="who reveal">
+            <div>
+              <b>Telemetry proves</b>
+              what the process actually did
+            </div>
+            <div>
+              <b>Rules correlate</b>
+              and compute the verdict
+            </div>
+            <div>
+              <b>AI explains</b>
+              only what the rules already found
+            </div>
+            <div>
+              <b>You decide</b>
+              on anything still unconfirmed
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- 4 · how you'd actually use it -->
+      <section class="slide">
+        <div class="inner">
+          <div class="eyebrow reveal">In practice</div>
+          <h2 class="reveal">How a developer actually gets this</h2>
+
+          <div class="lane reveal">
+            <span class="pill built">BUILT</span>
+            <div>
+              <h3>Inspection engine + API</h3>
+              <p>
+                The sandbox, the correlation pipeline and the verdict run today,
+                behind an HTTP API. That is the hard part, and it is done.
+              </p>
+              <code>POST /api/simulate → POST /api/investigate/:id → verdict</code>
+            </div>
+          </div>
+
+          <div class="lane reveal">
+            <span class="pill next">NEXT</span>
+            <div>
+              <h3>A wrapper around install</h3>
+              <p>
+                You type this instead of <code>npm install</code>. It downloads
+                with <code>--ignore-scripts</code>, inspects the hook in the
+                sandbox, and only then lets it run locally.
+              </p>
+              <code>npx traceback install analytics-helper</code>
+            </div>
+          </div>
+
+          <div class="lane reveal">
+            <span class="pill next">NEXT</span>
+            <div>
+              <h3>An MCP server your agent calls</h3>
+              <p>
+                Cursor or Claude Code checks with Traceback <em>before</em>
+                proposing the install — so the gate sits inside the agent loop
+                rather than beside it.
+              </p>
+              <code>agent → inspect_package() → allow / block</code>
+            </div>
+          </div>
+
+          <p class="reveal" style="margin-top: 0.6rem">
+            The engine is package-agnostic: point it at a real package and the
+            same pipeline runs. Today's demo uses a controlled malicious one so
+            the behaviour is reproducible on stage.
+          </p>
+        </div>
+      </section>
+
+      <!-- 5 · raw telemetry -->
       <section class="slide">
         <div class="inner">
           <div class="eyebrow reveal">What you start with</div>
