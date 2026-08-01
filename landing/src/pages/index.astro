@@ -1,0 +1,464 @@
+---
+/**
+ * Traceback landing page.
+ *
+ * Deliberately one file with inline styles: a landing page has no state, no
+ * routing, and no shared components yet, so a build step that produces one
+ * static HTML document is the whole requirement. Palette matches the app's
+ * design tokens so the two don't look like different products.
+ */
+
+const APP_URL = 'http://localhost:5173/traceback'
+const REPO_URL = 'https://github.com/whereissam/Traceback'
+
+const kinds = [
+  {
+    label: 'FACT',
+    tone: 'fact',
+    body: 'Directly observed in telemetry.',
+  },
+  {
+    label: 'CORRELATION',
+    tone: 'correlation',
+    body: 'Observations linked by time, process tree, or user.',
+  },
+  {
+    label: 'INFERENCE',
+    tone: 'inference',
+    body: 'A hypothesis about intent. Requires human confirmation.',
+  },
+]
+
+const properties = [
+  {
+    title: 'The model cannot invent events',
+    body: 'The LLM never sees raw telemetry. It receives findings already derived by deterministic rules and references them by id. Every id is checked against the set it was given; anything else is discarded before a row is written.',
+  },
+  {
+    title: 'The verdict is a rule, not a guess',
+    body: 'ALLOW / REVIEW / BLOCK is computed deterministically. A developer deciding whether to let third-party code run should be able to read the rule that produced the answer, and get the same answer twice.',
+  },
+  {
+    title: 'It never confirms its own hypothesis',
+    body: 'Every inference ships unconfirmed with a note describing what would settle it. Only a human marks it confirmed. When the canary proved transmission, the system withdrew its weaker guess rather than leaving it beside the proof.',
+  },
+  {
+    title: 'It states what it could not establish',
+    body: 'Every verdict carries a “not confirmed” list — including ALLOW, which says only the behaviour exercised during this run was observed. A gate that hides its uncertainty is more dangerous than one that has none.',
+  },
+]
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Traceback — a security gate for AI-installed npm packages</title>
+    <meta
+      name="description"
+      content="Traceback runs a package's install hook in an isolated sandbox, records what it actually does, and returns ALLOW / REVIEW / BLOCK — every claim labelled FACT, CORRELATION, or INFERENCE."
+    />
+    <style>
+      :root {
+        --background: #faf9f5;
+        --foreground: #3d3929;
+        --card: #fffefb;
+        --muted-foreground: #83827d;
+        --primary: #c96442;
+        --border: #dad9d4;
+        --fact: #4f6b4a;
+        --correlation: #6b5bc4;
+        --inference: #a9701c;
+        --danger: #b3261e;
+        --radius: 0.5rem;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: #262624;
+          --foreground: #c3c0b6;
+          --card: #2e2e2b;
+          --muted-foreground: #b7b5a9;
+          --primary: #d97757;
+          --border: #3e3e38;
+          --fact: #8fb08a;
+          --correlation: #a394ec;
+          --inference: #dba54a;
+          --danger: #ef4444;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--background);
+        color: var(--foreground);
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap {
+        max-width: 62rem;
+        margin: 0 auto;
+        padding: 0 1.25rem;
+      }
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      /* hero */
+      header {
+        padding: 5rem 0 3rem;
+        text-align: center;
+      }
+      .eyebrow {
+        display: inline-block;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--primary);
+        border: 1px solid color-mix(in srgb, var(--primary) 40%, transparent);
+        border-radius: 999px;
+        padding: 0.25rem 0.75rem;
+        margin-bottom: 1.5rem;
+      }
+      h1 {
+        font-size: clamp(2.25rem, 6vw, 3.75rem);
+        line-height: 1.1;
+        margin: 0 0 1.25rem;
+        letter-spacing: -0.02em;
+      }
+      .lede {
+        font-size: clamp(1.05rem, 2.2vw, 1.3rem);
+        color: var(--muted-foreground);
+        max-width: 42rem;
+        margin: 0 auto 1rem;
+      }
+      .maxim {
+        font-style: italic;
+        color: var(--muted-foreground);
+        margin-bottom: 2rem;
+      }
+      .actions {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .btn {
+        display: inline-block;
+        padding: 0.7rem 1.4rem;
+        border-radius: var(--radius);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 0.95rem;
+        border: 1px solid var(--primary);
+      }
+      .btn-primary {
+        background: var(--primary);
+        color: #fff;
+      }
+      .btn-ghost {
+        color: var(--foreground);
+        border-color: var(--border);
+      }
+
+      section {
+        padding: 3.5rem 0;
+        border-top: 1px solid var(--border);
+      }
+      h2 {
+        font-size: clamp(1.4rem, 3vw, 1.9rem);
+        margin: 0 0 0.5rem;
+        letter-spacing: -0.01em;
+      }
+      .sub {
+        color: var(--muted-foreground);
+        margin: 0 0 2rem;
+        max-width: 44rem;
+      }
+
+      pre.term {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1rem 1.15rem;
+        overflow-x: auto;
+        font-size: 0.82rem;
+        line-height: 1.65;
+        margin: 0;
+      }
+      .muted {
+        color: var(--muted-foreground);
+      }
+
+      .grid {
+        display: grid;
+        gap: 1rem;
+      }
+      @media (min-width: 720px) {
+        .grid-3 {
+          grid-template-columns: repeat(3, 1fr);
+        }
+        .grid-2 {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+      }
+      .card h3 {
+        margin: 0 0 0.5rem;
+        font-size: 1rem;
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted-foreground);
+        font-size: 0.9rem;
+      }
+
+      .badge {
+        display: inline-block;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 0.15rem 0.45rem;
+        border-radius: 0.25rem;
+        margin-bottom: 0.6rem;
+      }
+      .fact {
+        color: var(--fact);
+        background: color-mix(in srgb, var(--fact) 15%, transparent);
+      }
+      .correlation {
+        color: var(--correlation);
+        background: color-mix(in srgb, var(--correlation) 15%, transparent);
+      }
+      .inference {
+        color: var(--inference);
+        background: color-mix(in srgb, var(--inference) 15%, transparent);
+      }
+
+      .verdict {
+        border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
+        background: color-mix(in srgb, var(--danger) 10%, transparent);
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+      }
+      .verdict .tag {
+        color: var(--danger);
+        font-weight: 800;
+        font-size: 1.15rem;
+        letter-spacing: 0.02em;
+      }
+
+      ul.plain {
+        margin: 0;
+        padding-left: 1.1rem;
+        color: var(--muted-foreground);
+        font-size: 0.9rem;
+      }
+      ul.plain li {
+        margin-bottom: 0.35rem;
+      }
+
+      footer {
+        border-top: 1px solid var(--border);
+        padding: 2.5rem 0 4rem;
+        color: var(--muted-foreground);
+        font-size: 0.85rem;
+      }
+      footer a {
+        color: var(--primary);
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <header>
+        <span class="eyebrow">Runtime inspection for npm install hooks</span>
+        <h1>Do not trust what the package says.<br />Observe what it does.</h1>
+        <p class="lede">
+          Your AI coding agent asks permission to run <code>npm install</code>.
+          That permission does not cover the code npm runs on the package's
+          behalf.
+        </p>
+        <p class="maxim">
+          Telemetry proves. Rules correlate. AI explains. You decide.
+        </p>
+        <div class="actions">
+          <a class="btn btn-primary" href={APP_URL}>Open the app</a>
+          <a class="btn btn-ghost" href={REPO_URL}>Read the code</a>
+        </div>
+      </header>
+
+      <section>
+        <h2>The gap</h2>
+        <p class="sub">
+          A package can declare a lifecycle script that npm executes
+          automatically during installation — and it can arrive through a
+          dependency of a dependency, where nothing at the top level looks
+          unusual.
+        </p>
+        <pre class="term"><code>{`{ "scripts": { "postinstall": "node postinstall.js" } }`}</code></pre>
+        <p class="sub" style="margin-top:1.25rem">
+          That script is ordinary code on your machine. It can spawn processes,
+          read <code>.env</code> or <code>~/.ssh</code>, call out to the
+          network, and rewrite <code>.github/workflows</code>. None of it
+          appeared in the prompt you approved.
+        </p>
+      </section>
+
+      <section>
+        <h2>What you get back</h2>
+        <p class="sub">
+          Traceback runs the hook in an isolated sandbox and returns a decision
+          with its evidence attached. Verbatim output, only line-wrapped:
+        </p>
+        <div class="verdict">
+          <div class="tag">BLOCK — high risk</div>
+          <p style="margin:.5rem 0 1rem">
+            A synthetic credential was read and observed leaving the sandbox.
+          </p>
+          <p style="margin:0 0 .35rem">
+            <span class="badge fact">FACT</span>
+            <span class="muted"
+              >&nbsp;Synthetic credential was transmitted externally</span
+            >
+          </p>
+          <p style="margin:0 0 1rem">
+            <span class="badge fact">FACT</span>
+            <span class="muted"
+              >&nbsp;Deployment configuration modified by a lifecycle script</span
+            >
+          </p>
+          <div class="grid grid-2">
+            <div>
+              <strong style="font-size:.8rem;color:var(--fact)">CONFIRMED</strong>
+              <ul class="plain" style="margin-top:.4rem">
+                <li>
+                  The seeded canary appeared in the payload sent to an external
+                  host.
+                </li>
+                <li>Build files written: .github/workflows/deploy.yml</li>
+              </ul>
+            </div>
+            <div>
+              <strong style="font-size:.8rem;color:var(--inference)"
+                >NOT CONFIRMED</strong
+              >
+              <ul class="plain" style="margin-top:.4rem">
+                <li>
+                  Whether those changes were committed, pushed, or later
+                  executed.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Every claim is ranked by how much it asserts</h2>
+        <p class="sub">
+          So a reader never has to guess how much the system is claiming.
+        </p>
+        <div class="grid grid-3">
+          {
+            kinds.map((k) => (
+              <div class="card">
+                <span class={`badge ${k.tone}`}>{k.label}</span>
+                <p>{k.body}</p>
+              </div>
+            ))
+          }
+        </div>
+        <p class="sub" style="margin-top:1.5rem">
+          An inference cannot exist without a correlation beneath it, and a
+          correlation cannot exist without facts beneath that. Remove the
+          evidence and the conclusion disappears with it — a structural rule,
+          with a test.
+        </p>
+      </section>
+
+      <section>
+        <h2>The canary</h2>
+        <p class="sub">
+          “Was the secret actually sent?” is normally unanswerable from timing
+          alone. So the sandbox seeds a recognisable synthetic token into the
+          credential file before the install runs. If that exact token appears
+          in what leaves the container, transmission is observed — not inferred.
+        </p>
+        <pre class="term"><code><span class="muted">without the canary</span>
+<span style="color:var(--inference)">INFERENCE</span>  Possible credential exfiltration        <span class="muted">(medium)</span>
+
+<span class="muted">with it</span>
+<span style="color:var(--fact)">FACT</span>       Synthetic credential transmitted off-host  <span class="muted">(high)</span></code></pre>
+        <p class="sub" style="margin-top:1.25rem">
+          And when the fact appears, the system <strong>withdraws</strong> the
+          inference rather than leaving a guess sitting next to the proof.
+        </p>
+      </section>
+
+      <section>
+        <h2>Why this isn't a model summarising logs</h2>
+        <div class="grid grid-2">
+          {
+            properties.map((p) => (
+              <div class="card">
+                <h3>{p.title}</h3>
+                <p>{p.body}</p>
+              </div>
+            ))
+          }
+        </div>
+      </section>
+
+      <section>
+        <h2>Honest about its limits</h2>
+        <p class="sub">
+          A security tool that hides what it cannot establish has missed its own
+          point.
+        </p>
+        <ul class="plain">
+          <li>
+            Telemetry is currently self-reported by the simulation, not captured
+            from the kernel. Syscall capture is the next step.
+          </li>
+          <li>
+            The canary proves transmission only because we control it. A package
+            that encrypts its payload would defeat it — and exfiltration would
+            correctly fall back to an inference. It under-claims rather than
+            over-claims.
+          </li>
+          <li>
+            Local <code>--ignore-scripts</code> interception isn't built yet. The
+            sandbox path is real.
+          </li>
+          <li>One host, one session. No cross-host correlation.</li>
+        </ul>
+      </section>
+
+      <footer>
+        <p>
+          All suspicious behaviour is simulated inside an isolated sandbox using
+          synthetic secrets. No real credentials or external systems are
+          accessed.
+        </p>
+        <p>
+          <a href={REPO_URL}>Source</a> · MIT licensed · Built with Astro,
+          React, Hono, Supabase, Modal and OpenAI.
+        </p>
+      </footer>
+    </div>
+  </body>
+</html>

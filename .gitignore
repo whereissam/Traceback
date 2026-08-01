@@ -35,3 +35,6 @@ dist-ssr
 __pycache__/
 *.py[cod]
 .venv/
+
+# Astro build cache (landing/)
+.astro/
