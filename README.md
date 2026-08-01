@@ -158,20 +158,21 @@ combine well; this is the dynamic half.
 The obvious question — _do I install something? is it a CLI? does my agent call
 it?_ Three delivery paths, tagged honestly:
 
-### ✅ Built today — the inspection engine, behind an HTTP API
+### ✅ Built today — inspect any real package on npm
 
-The sandbox, the correlation pipeline, the canary, and the verdict all work.
-That's the hard part, and it's done. Anything can drive it:
+Name a package. Traceback fetches it with `--ignore-scripts` so nothing runs,
+reads the lifecycle hooks out of its own `package.json`, detonates them in the
+sandbox under `strace`, and returns a verdict:
 
 ```bash
-curl -X POST localhost:8787/api/simulate            # detonate, collect telemetry
-curl -X POST localhost:8787/api/investigate/:id     # correlate → verdict
-# → {"verdict":"block","risk":"high","finding_counts":{"FACT":7,...}}
+curl -X POST localhost:8787/api/inspect -d '{"package":"esbuild"}'
+# → esbuild@0.28.1, postinstall: node install.js, 3 events
+curl -X POST localhost:8787/api/investigate/:id
+# → {"verdict":"allow","risk":"low","finding_counts":{"FACT":3,...}}
 ```
 
-The engine is **package-agnostic** — the pipeline consumes normalised events, so
-pointing it at a different package is an input change, not a rewrite. The demo
-uses a controlled malicious package so the behaviour is reproducible on stage.
+That's the hard part, and it's done — including the part that matters most:
+**a legitimate package with a genuine install hook passes.**
 
 ### ⏳ Next — a wrapper you type instead of `npm install`
 
