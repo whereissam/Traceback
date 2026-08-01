@@ -262,7 +262,72 @@ here and not 3.
 
 ## 3 · How it decides something is malicious
 
-It watches **behaviour**, it does not read code.
+### First: it does not analyse the package
+
+This is the most common misunderstanding, so it's worth stating flatly.
+Traceback never looks at:
+
+- the source code
+- the file listing
+- the dependency tree
+- file sizes, obfuscation, or any other property of the shipped artefact
+
+It runs the install hook and records what the **operating system kernel**
+observed.
+
+|                  | Static analysis (not what we do)                                                    | Dynamic analysis (what we do)                                            |
+| ---------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Input            | Source code, file list                                                              | Syscalls the process actually made                                       |
+| Can be fooled by | Obfuscation, runtime string assembly, second-stage payloads fetched at install time | Much harder — a package can lie in its source, it cannot lie to `openat` |
+| Produces         | "there is an `fs.readFileSync` call here"                                           | "pid 33 opened `/work/.env` and read 31 bytes at 14:23:01"               |
+
+The difference matters: seeing `fs.readFileSync` in source tells you nothing
+about whether it runs, or which file it opens. We wait until it has run and
+record what it actually touched.
+
+### The bait: we plant the credentials ourselves
+
+There is no real `.env` in the sandbox. **We create a fake one before the hook
+runs**, along with fake AWS and SSH credentials:
+
+```
+/work/.env               API_KEY=TRACEBACK_CANARY_a91f4c27
+/work/.aws/credentials   aws_secret_access_key = TRACEBACK_CANARY_a91f4c27
+/work/.ssh/id_rsa        -----BEGIN OPENSSH PRIVATE KEY-----
+                         TRACEBACK_CANARY_a91f4c27
+```
+
+Every value is the same synthetic canary string. It grants access to nothing,
+anywhere. Its only two jobs are:
+
+1. **Be somewhere a credential-stealing hook would look.** A package with no
+   business reading `.env` has no reason to open it. If it does, that is a
+   signal — and it's a signal we obtained without the package knowing it was
+   being watched.
+2. **Be recognisable if it leaves.** If the string `TRACEBACK_CANARY_a91f4c27`
+   turns up in an outbound payload, we are not guessing that a secret was
+   exfiltrated. We are reading it in the transmitted bytes.
+
+This is baiting, not auditing. We are not checking whether your `.env` is
+protected — we are putting a marked bill in the till and watching who takes it.
+
+### What that looks like in practice
+
+Same sandbox, same seeded files, two different packages:
+
+```
+esbuild                                    the malicious fixture
+─────────────────────────────────          ─────────────────────────────────
+execve("node", ["install.js"])             execve("node", ["postinstall.js"])
+execve("esbuild", ["--version"])           openat("/work/.env", O_RDONLY) = 17
+                                           read(17, "API_KEY=TRACEBACK_…")
+(never opens /work/.env)                   connect(18, {AF_INET, …})
+                                           openat("/work/deploy.yml", O_WRONLY)
+
+→ ALLOW · low                              → BLOCK · high
+```
+
+esbuild had exactly the same bait available to it. It didn't take it.
 
 ### Step 1 — download without executing
 
