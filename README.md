@@ -261,7 +261,9 @@ Only Supabase is required. Without Modal it uses a local telemetry fixture;
 without an OpenAI key a rule engine builds the timeline. Both fallbacks are
 labelled in the interface — a fallback run is never presented as the real thing.
 
-Full walkthrough and troubleshooting: **[docs/traceback/SETUP.md](docs/traceback/SETUP.md)**
+Hands-on guide — inspect a real package, and how the detection works:
+**[docs/traceback/GUIDE.md](docs/traceback/GUIDE.md)**
+Setup and troubleshooting: **[docs/traceback/SETUP.md](docs/traceback/SETUP.md)**
 
 ## How it works
 

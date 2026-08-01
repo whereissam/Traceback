@@ -1,39 +1,43 @@
-# Traceback — 實際操作指南
+# Traceback — hands-on guide
 
-給你自己跑、也給你 demo 給別人看。所有指令都可以複製貼上，輸出都是實測過的。
-
----
-
-## 先講清楚：它做什麼、不做什麼
-
-|             |                                                                                         |
-| ----------- | --------------------------------------------------------------------------------------- |
-| ✅ **偵測** | 給它一個 npm 套件名，它在沙箱裡跑那個套件的安裝腳本，觀察實際行為，回你一個有證據的判定 |
-| ❌ **阻擋** | **沒有做。** 它回傳 `"verdict": "block"` 這個字串，但**不會攔下你的 `npm install`**     |
-
-現在的狀態是「**會給你答案的偵測器**」，不是「**會擋下來的閘門**」。要變成真的擋，需要那層還沒做的 CLI / MCP 攔截。
+Every command below is copy-pasteable, and every output is from a real run.
 
 ---
 
-## 0 · 啟動
+## What it does, and what it doesn't
+
+|                |                                                                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ✅ **Detects** | Give it an npm package name. It runs that package's install hooks in a sandbox, watches what they actually do, and returns a verdict with evidence. |
+| ❌ **Blocks**  | **Not built.** It returns the string `"verdict": "block"` — nothing intercepts your `npm install`.                                                  |
+
+Today it is **a detector that gives you an answer**, not **a gate that stops
+anything**. Turning it into a real gate needs the CLI or MCP interception layer,
+which is on the roadmap and honestly labelled as such.
+
+---
+
+## 0 · Start it
 
 ```bash
 bun run dev:all        # API :8787 + UI :5173
 curl -s localhost:8787/api/health
 ```
 
-看到這個才是兩個整合都活著：
+Both integrations are live when you see:
 
 ```json
 { "ok": true, "llm": "gpt-5.6-luna", "modal": true }
 ```
 
-- `"modal":true` → 沙箱是真的。`false` 的話會用本地假資料，UI 會標橘色 banner
-- `"llm":"gpt-5.6-luna"` → 時間軸由模型寫。`null` 的話規則引擎會寫，判定完全一樣
+- `"modal": true` — the sandbox is real. If `false`, a local fixture is used and
+  the UI shows an amber banner saying so.
+- `"llm": "gpt-5.6-luna"` — the model writes the timeline prose. If `null`, a
+  rule engine writes it and **the verdict is identical** (see §5).
 
 ---
 
-## 1 · 檢查一個真實套件（最有說服力的 demo）
+## 1 · Inspect a real package
 
 ```bash
 curl -s -X POST localhost:8787/api/inspect \
@@ -41,7 +45,7 @@ curl -s -X POST localhost:8787/api/inspect \
   -d '{"package":"esbuild"}' | python3 -m json.tool
 ```
 
-實際輸出：
+Actual output:
 
 ```json
 {
@@ -54,7 +58,7 @@ curl -s -X POST localhost:8787/api/inspect \
 }
 ```
 
-拿 `investigation.id` 跑分析：
+Take the `investigation.id` and analyse it:
 
 ```bash
 curl -s -X POST localhost:8787/api/investigate/<id> | python3 -m json.tool
@@ -69,25 +73,28 @@ curl -s -X POST localhost:8787/api/investigate/<id> | python3 -m json.tool
 }
 ```
 
-**這才是重點**：esbuild 有一個貨真價實的 `postinstall` hook，它**放行**。一個什麼都標紅的偵測器毫無價值。
+**This is the result that matters.** esbuild has a genuine `postinstall` hook,
+and it **passes**. A detector that flags everything proves nothing.
 
-### 其他實測過的真實套件
+### Verified against real packages
 
-| 套件      | 版本   | 安裝腳本                       | 判定            |
-| --------- | ------ | ------------------------------ | --------------- |
-| `esbuild` | 0.28.1 | `postinstall: node install.js` | **ALLOW** · low |
-| `core-js` | 3.49.0 | `postinstall`                  | **ALLOW** · low |
-| `bcrypt`  | 6.0.0  | `install`                      | **ALLOW** · low |
-| `lodash`  | 4.18.1 | 無                             | 沒東西可跑      |
-| `sharp`   | 0.35.3 | 無                             | 沒東西可跑      |
+| Package   | Version | Install hook                   | Verdict         |
+| --------- | ------- | ------------------------------ | --------------- |
+| `esbuild` | 0.28.1  | `postinstall: node install.js` | **ALLOW** · low |
+| `core-js` | 3.49.0  | `postinstall`                  | **ALLOW** · low |
+| `bcrypt`  | 6.0.0   | `install`                      | **ALLOW** · low |
+| `lodash`  | 4.18.1  | none                           | nothing to run  |
+| `sharp`   | 0.35.3  | none                           | nothing to run  |
 
-隨便挑一個 npm 上的套件都可以試。第一次跑要 40–90 秒（要下載 + 開容器）。
+Any package on npm works. Expect 40–90 seconds on a cold run (download plus
+container start); subsequent runs are faster.
 
 ---
 
-## 2 · 惡意套件長什麼樣
+## 2 · What a malicious package looks like
 
-真的惡意套件不會留在 npm 上（會被下架），所以我們用一個受控的：
+Genuinely malicious packages get pulled from npm quickly, so the comparison uses
+a controlled fixture:
 
 ```bash
 curl -s -X POST localhost:8787/api/simulate -d '{}' -H 'content-type: application/json'
@@ -103,35 +110,36 @@ curl -s -X POST localhost:8787/api/investigate/<id> | python3 -m json.tool
 }
 ```
 
-**同一個引擎、同一套規則**，只是輸入的行為不同。
+**Same engine, same rules.** Only the observed behaviour differs.
 
 ---
 
-## 3 · 它到底怎麼知道是惡意的？
+## 3 · How it decides something is malicious
 
-這是最常被問的。答案是：**看行為，不看程式碼**。
+The short answer: **it watches behaviour, it does not read code.**
 
-### 步驟一：先不執行
+### Step 1 — download without executing
 
 ```bash
 npm install <pkg> --ignore-scripts
 ```
 
-下載檔案，但**不跑**任何 `preinstall` / `install` / `postinstall`。
+Fetches the files but runs no `preinstall` / `install` / `postinstall`.
 
-### 步驟二：讀它自己宣告的 hook
+### Step 2 — read the hooks the package declares
 
-從 `node_modules/<pkg>/package.json` 裡撈：
+From `node_modules/<pkg>/package.json`:
 
 ```json
 { "scripts": { "postinstall": "node install.js" } }
 ```
 
-沒有 hook → 到此為止，**沒東西可以引爆**（lodash 就是這種）。
+No hooks means nothing executes at install time — that's a real answer, and it's
+where `lodash` stops.
 
-### 步驟三：放誘餌，然後在沙箱裡引爆
+### Step 3 — seed canaries, then detonate in the sandbox
 
-沙箱裡先鋪好假憑證：
+Synthetic credentials are placed in the workspace first:
 
 ```
 /work/.env               API_KEY=TRACEBACK_CANARY_a91f4c27
@@ -139,119 +147,149 @@ npm install <pkg> --ignore-scripts
 /work/.ssh/id_rsa        -----BEGIN OPENSSH PRIVATE KEY-----
 ```
 
-這些全都是假的，沒有任何權限。它們唯一的作用是：**如果套件去讀它們，我們會知道；如果它們的內容跑出去，我們會認得。**
+None of these grant access to anything. Their only job is to be **recognisable
+if read**, and **traceable if their contents leave the container**.
 
-然後用 `strace` 跑 hook：
+Then the hook runs under `strace`:
 
 ```bash
 strace -f -tt -e trace=execve,openat,read,connect,clone -o trace.log \
   sh -c "node install.js"
 ```
 
-### 步驟四：從系統呼叫還原行為
+### Step 4 — reconstruct behaviour from syscalls
 
-`strace` 攔到的是**核心層**的動作，不是套件自己說它做了什麼：
+`strace` records what the **kernel** saw, not what the package claims:
 
 ```
-execve("/usr/bin/node", ["node", "install.js"])     → 它開了一個 process
-openat(AT_FDCWD, "/work/.env", O_RDONLY) = 17       → 它打開了 .env
-read(17, ...)                                        → 它真的讀了內容
-connect(18, {AF_INET, "104.21.x.x"})                 → 它對外連線了
+execve("/usr/bin/node", ["node", "install.js"])     → it started a process
+openat(AT_FDCWD, "/work/.env", O_RDONLY) = 17       → it opened .env
+read(17, ...)                                        → it actually read it
+connect(18, {AF_INET, "104.21.x.x"})                 → it called out
 ```
 
-這就是「不相信套件說什麼，觀察它做什麼」的實作。套件可以在程式碼裡騙你，但它騙不了 `openat`。
+This is what "observe what it does" means in practice. A package can lie in its
+source. It cannot lie to `openat`.
 
-### 步驟五：規則判定
+### Step 5 — rules produce the verdict
 
-| 觀察到                                                              | 判定                            |
-| ------------------------------------------------------------------- | ------------------------------- |
-| 讀 `.env` / `.ssh` / `.aws` **而且**對外連線（同一個 process tree） | **BLOCK**                       |
-| 改 `.github/workflows` / `Dockerfile` / `package.json`              | **BLOCK**                       |
-| 誘餌字串出現在送出去的內容裡                                        | **BLOCK**，而且是 FACT 不是推測 |
-| 有對外連線，但沒碰敏感檔案                                          | **REVIEW**                      |
-| 只在自己目錄裡寫東西、沒對外連線                                    | **ALLOW**                       |
+| Observed                                                               | Verdict                                |
+| ---------------------------------------------------------------------- | -------------------------------------- |
+| Reads `.env` / `.ssh` / `.aws` **and** connects out, same process tree | **BLOCK**                              |
+| Modifies `.github/workflows` / `Dockerfile` / `package.json`           | **BLOCK**                              |
+| The canary appears in what was transmitted                             | **BLOCK** — and as a FACT, not a guess |
+| Connects out but touches nothing sensitive                             | **REVIEW**                             |
+| Writes only inside its own directory, no egress                        | **ALLOW**                              |
 
-規則寫在 `server/verdict.ts`，是**決定性的** —— 不是模型猜的，跑兩次結果一樣。
+The rules live in `server/verdict.ts` and are deterministic — not model output.
+Run it twice, get the same answer.
 
-### 關鍵：兩個訊號才算數
+### Why two signals are required
 
-`npm install` 觸發 `postinstall` 是**極度正常**的事（半個 npm 生態都這樣）。所以：
+`npm install` triggering a `postinstall` hook is completely normal — a large part
+of the ecosystem depends on it. So:
 
-- 「有安裝」+「有 hook」→ **不會**觸發任何警告
-- 必須要有**風險行為**（讀憑證 / 對外連線 / 改部署檔）才會
+- install + lifecycle hook alone → **never** raises anything
+- there must also be **risk behaviour**: credential access, egress, or a change
+  to build/deploy configuration
 
-這就是為什麼 esbuild 會過。它有 hook、有開 process，但沒碰任何敏感的東西。
+That's exactly why esbuild passes. It has a hook and spawns a process, but it
+touches nothing sensitive.
 
 ---
 
-## 4 · 誘餌：把推測變成事實
+## 4 · The canary: turning a guess into an observation
 
-一般情況下，「秘密到底有沒有被送出去」是答不出來的 —— 你看到讀檔案，320 毫秒後看到對外連線，但你沒看到封包內容。
-
-所以只能說：
-
-```
-INFERENCE   可能有憑證外洩   (medium)
-```
-
-但如果誘餌字串 `TRACEBACK_CANARY_a91f4c27` 出現在**離開容器的資料**裡，那就不是推測了：
+Normally "was the secret actually sent?" cannot be answered from timing. You see
+a file read, then an outbound connection 320ms later — but you never saw the
+payload. So the honest statement is:
 
 ```
-FACT        合成憑證確實被送出   (high)
+INFERENCE   Possible credential exfiltration   (medium)
 ```
 
-而且這時候系統會**把原本那個比較弱的推測收回去**，不會讓猜測跟證據並排放著。
+But if the canary string `TRACEBACK_CANARY_a91f4c27` appears in **what left the
+container**, transmission is observed:
+
+```
+FACT        Synthetic credential was transmitted off-host   (high)
+```
+
+And when that FACT appears, the system **withdraws the weaker inference** rather
+than leaving a guess sitting beside the proof.
 
 ---
 
-## 5 · UI demo 順序
+## 5 · Proof the AI isn't deciding anything
 
-開 <http://localhost:5173/traceback>
+Same telemetry, analysed twice:
 
-1. **上面的輸入框**打 `esbuild` → 按 Inspect
-   → 「一個真實的、有 postinstall hook 的正常套件，它放行了」
-2. **按 Run simulation** → 指著原始事件表
-   → 「六行 telemetry，每行都真，沒有一行解釋任何事」
-3. **按 Build timeline**（約 9 秒）
-   → 「它在關聯事件，模型在寫時間軸 —— 但模型看不到原始 telemetry」
-4. **BLOCKED 卡片** → 指著右邊 **Not confirmed** 那欄
-   → 「它老實說它沒能確認的東西」
-5. **捲到 INFERENCE** → 指著 Confirm 按鈕
-   → 「機器不會自己按這個」
+```bash
+OPENAI_API_KEY= bun server/index.ts     # → {"llm":null}
+```
 
----
+|                        | Verdict        | FACT / CORR / INF | Timeline prose                                             |
+| ---------------------- | -------------- | ----------------- | ---------------------------------------------------------- |
+| `OPENAI_API_KEY` set   | `block` · high | 7 / 4 / 2         | full narrative                                             |
+| `OPENAI_API_KEY` empty | `block` · high | **7 / 4 / 2**     | `3 findings in this phase (FACT, CORRELATION, INFERENCE).` |
 
-## 6 · 抓不到的情況
-
-要老實講，因為評審一定會問：
-
-| 情況                                        | 結果                                                                   |
-| ------------------------------------------- | ---------------------------------------------------------------------- |
-| 把偷到的東西**加密**再送                    | 誘餌不會出現 → 退回 **INFERENCE**，判定變 `review`。**少說，不會多說** |
-| 套件偵測到自己在沙箱裡就裝乖                | **抓不到**。動態分析的通病                                             |
-| 惡意行為不在安裝時，而在你 `require()` 之後 | **抓不到**。我們只觀察安裝階段                                         |
-| 惡意的是依賴的依賴                          | 目前只跑最上層那個套件的 hook                                          |
-
-前兩項是這類工具的本質限制，不是調參數能解決的。
+Every number that matters is unchanged; only readability degrades. The model is
+a writer — not a witness, and not a judge. See
+[`docs/architecture.md`](../architecture.md).
 
 ---
 
-## 7 · 出事的時候
+## 6 · Demo sequence (UI)
 
-| 狀況                          | 怎麼辦 / 怎麼講                                                                       |
-| ----------------------------- | ------------------------------------------------------------------------------------- |
-| 橘色 banner「local fallback」 | **講出來**：Modal 連不上，退回本地資料而且標示了。fallback 永遠不會被當成真的沙箱結果 |
-| `generated by rule-engine`    | 沒有 API key，決定性引擎寫的 —— 正確性不依賴模型                                      |
-| inspect 超過 90 秒            | 第一次跑要下載 + 開容器，正常。第二次會快                                             |
-| `502` 或 sandbox 錯誤         | Modal 那邊掛了。改用 Run simulation（本地 fixture 路徑）                              |
-| 全掛                          | 開另一個分頁 —— 跑完的調查都在 Supabase，重新載入就有                                 |
+Open <http://localhost:5173/traceback>
 
-**上台前**：先完整跑一次，分頁不要關，當保險。
+1. Type `esbuild` in the inspect box → **Inspect**
+   → "A real package with a genuine postinstall hook. It passes."
+2. **Run simulation** → point at the raw event table
+   → "Six events, every line true, not one of them explains anything."
+3. **Build timeline** (~9s)
+   → "It's correlating now, and the model is writing the timeline — but the
+   model never sees raw telemetry."
+4. **BLOCKED card** → point at the **Not confirmed** column
+   → "It states what it could not establish."
+5. Scroll to an INFERENCE → point at **Confirm finding**
+   → "The machine never clicks this."
 
 ---
 
-## 8 · 一句話總結
+## 7 · What it will not catch
 
-> 它不看程式碼寫了什麼，它在沙箱裡跑一遍，看核心層實際發生了什麼，然後用可以讀的規則給你一個判定 —— 每個結論都標了「這是事實」還是「這是推測」。
+Worth stating up front:
+
+| Situation                                               | Outcome                                                                                                                |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Payload is **encrypted** before being sent              | Canary never appears → falls back to **INFERENCE**, verdict becomes `review`. It under-claims rather than over-claims. |
+| Package detects the sandbox and behaves                 | **Missed.** The standard weakness of dynamic analysis.                                                                 |
+| Malicious behaviour happens at `require()`, not install | **Missed.** Only install-time behaviour is observed.                                                                   |
+| The malicious code is in a transitive dependency        | Only the named package's hooks are detonated today.                                                                    |
+
+The first two are inherent to this approach, not tuning problems.
+
+---
+
+## 8 · When things go wrong
+
+| Symptom                          | What to do                                                                                                                        |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Amber banner: "local fallback"   | Say it out loud — Modal is unreachable, so it fell back and **labelled it**. A fallback is never presented as a real sandbox run. |
+| `generated by rule-engine`       | No API key. The deterministic engine wrote it; correctness never depended on the model.                                           |
+| Inspection takes over 90 seconds | Cold start: download plus container boot. The second run is faster.                                                               |
+| `502` or a sandbox error         | Modal is down. Use **Run simulation** — that path has a local fallback.                                                           |
+| Everything fails                 | Open a previous investigation. Completed runs persist in Supabase and re-render from `GET /api/investigation/:id`.                |
+
+Before presenting: run the flow once and leave that tab open as a safety net.
+
+---
+
+## 9 · In one sentence
+
+> It doesn't read what the code says it will do. It runs the install hook in a
+> sandbox, records what the kernel actually saw, and applies readable rules to
+> produce a verdict — with every claim marked as observed fact or as inference.
 >
-> 但它現在**只會告訴你**，不會替你擋。
+> Today it **tells you**. It does not yet stop you.
