@@ -232,7 +232,22 @@ def _inspect(package: str) -> dict[str, Any]:
             "note": "No install lifecycle scripts declared — nothing to detonate.",
         }
 
-    # --- 3. Seed canaries, then run the hook under strace -------------------
+    # --- 3. Read the hook's source, so capability can be assessed statically
+    # even if the sandbox run exercises none of it.
+    sources: dict[str, str] = {}
+    pkg_dir_early = os.path.join(WORK, "node_modules", name)
+    for hook_cmd in scripts.values():
+        for token in hook_cmd.split():
+            if token.endswith((".js", ".cjs", ".mjs")):
+                candidate = os.path.join(pkg_dir_early, token)
+                if os.path.exists(candidate):
+                    try:
+                        with open(candidate, encoding="utf-8", errors="replace") as fh:
+                            sources[token] = fh.read()[:200_000]
+                    except OSError:
+                        pass
+
+    # --- 4. Seed canaries, then run the hook under strace -------------------
     _seed_canaries()
     trace = "/tmp/trace.log"
     hook = next(iter(scripts.values()))
@@ -257,6 +272,7 @@ def _inspect(package: str) -> dict[str, Any]:
         "package": package,
         "version": version,
         "lifecycle_scripts": scripts,
+        "hook_sources": sources,
         "events": events,
         "event_count": len(events),
     }

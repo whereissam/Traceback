@@ -93,6 +93,8 @@ export interface InspectionResult {
   package: string
   version: string | null
   lifecycleScripts: Record<string, string>
+  /** Source of each lifecycle script, for static capability analysis. */
+  hookSources: Record<string, string>
   events: RawTelemetryEvent[]
   note: string | null
   error: string | null
@@ -113,6 +115,7 @@ export async function inspectPackage(name: string): Promise<InspectionResult> {
       package: name,
       version: null,
       lifecycleScripts: {},
+      hookSources: {},
       events: [],
       note: null,
       error:
@@ -136,6 +139,7 @@ export async function inspectPackage(name: string): Promise<InspectionResult> {
       package?: string
       version?: string | null
       lifecycle_scripts?: Record<string, string>
+      hook_sources?: Record<string, string>
       events?: unknown
       note?: string
       error?: string
@@ -145,6 +149,7 @@ export async function inspectPackage(name: string): Promise<InspectionResult> {
       package: payload.package ?? name,
       version: payload.version ?? null,
       lifecycleScripts: payload.lifecycle_scripts ?? {},
+      hookSources: payload.hook_sources ?? {},
       events: Array.isArray(payload.events)
         ? payload.events.filter(isRawEvent)
         : [],
@@ -156,6 +161,7 @@ export async function inspectPackage(name: string): Promise<InspectionResult> {
       package: name,
       version: null,
       lifecycleScripts: {},
+      hookSources: {},
       events: [],
       note: null,
       error: error instanceof Error ? error.message : String(error),

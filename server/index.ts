@@ -15,6 +15,7 @@ import { cors } from 'hono/cors'
 import { env } from './env'
 import { inspectPackage, runSimulation } from './simulate'
 import { computeVerdict, renderVerdictSection } from './verdict'
+import { analyseSource, capabilitiesNotExercised } from './static-analysis'
 import { generateReport, isLlmConfigured } from './llm'
 import {
   buildDeterministicTimeline,
@@ -56,6 +57,18 @@ const FIXTURE_NAMES = new Set([
   'unknown-analytics-helper',
   'unknown-analytics-helper@1.4.2',
 ])
+
+/**
+ * Static analysis is computed at inspection time (that is when the source is in
+ * hand) but consumed at analysis time. Held in memory rather than persisted:
+ * it is derived from the package, so a re-inspection regenerates it, and a
+ * server restart losing it degrades the verdict to dynamic-only rather than
+ * corrupting anything.
+ */
+const staticByInvestigation = new Map<
+  string,
+  ReturnType<typeof analyseSource>
+>()
 
 const app = new Hono()
 
@@ -158,9 +171,23 @@ app.post('/api/inspect', async (c) => {
       ? await insertEvents(investigation.id, result.events)
       : []
 
+  // Static capability scan of the hook source. Cheap, and it covers the one
+  // case dynamic analysis structurally cannot: a package that stays dormant.
+  const statik = analyseSource(result.hookSources)
+  staticByInvestigation.set(investigation.id, statik)
+
   return c.json({
     investigation,
     package: result.package,
+    static_analysis: {
+      files_scanned: statik.filesScanned,
+      bytes_scanned: statik.bytesScanned,
+      capabilities: statik.capabilities.map((cap) => ({
+        id: cap.id,
+        label: cap.label,
+        matches: cap.matches,
+      })),
+    },
     version: result.version,
     lifecycle_scripts: result.lifecycleScripts,
     has_lifecycle_scripts: scriptCount > 0,
@@ -263,7 +290,15 @@ app.post('/api/investigate/:id', async (c) => {
   const containmentSteps = llm?.containment_steps ?? DEFAULT_CONTAINMENT_STEPS
 
   // Rule-based decision, computed from findings — never model-generated.
-  const verdict = computeVerdict(findingRows, supplyChain)
+  const statik = staticByInvestigation.get(id)
+  const dormant = statik
+    ? capabilitiesNotExercised(statik, {
+        readCredentials: (supplyChain?.secretsAccessed ?? []).length > 0,
+        madeNetworkRequest: (supplyChain?.outboundHosts ?? []).length > 0,
+        spawnedProcess: events.some((e) => e.event_type === 'process_start'),
+      })
+    : []
+  const verdict = computeVerdict(findingRows, supplyChain, dormant)
 
   const markdown = renderMarkdownReport({
     title: investigation.title ?? 'Untitled investigation',
@@ -296,6 +331,7 @@ app.post('/api/investigate/:id', async (c) => {
     supply_chain_detected: Boolean(supplyChain),
     verdict: verdict.verdict,
     risk: verdict.risk,
+    dormant_capabilities: dormant.map((c) => c.id),
     generated_by: report.generated_by,
   })
 })

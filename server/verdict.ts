@@ -12,6 +12,7 @@
 
 import type { Finding } from '../src/lib/traceback/types'
 import type { SupplyChainIndicators } from './supply-chain'
+import type { Capability } from './static-analysis'
 
 export type Verdict = 'allow' | 'review' | 'block'
 
@@ -42,6 +43,12 @@ const SENSITIVE_CREDENTIAL =
 export function computeVerdict(
   findings: Finding[],
   supplyChain: SupplyChainIndicators | null,
+  /**
+   * Capabilities the source clearly has but the sandbox never saw used. Absent
+   * when no static analysis ran (the fixture path), which is why it defaults
+   * to empty rather than being required.
+   */
+  dormantCapabilities: Capability[] = [],
 ): VerdictResult {
   const reasons: VerdictReason[] = []
   const confirmed: string[] = []
@@ -155,6 +162,23 @@ export function computeVerdict(
     })
     confirmed.push(`Files read: ${supplyChain!.secretsAccessed.join(', ')}.`)
   }
+  // Dynamic analysis alone cannot distinguish "harmless" from "waited us out".
+  // Reading the source can: if the code carries a capability it never used
+  // while observed, that is worth a human look even though nothing happened.
+  if (dormantCapabilities.length > 0) {
+    for (const capability of dormantCapabilities) {
+      reasons.push({
+        rule: `Capability present in source but not exercised: ${capability.label.toLowerCase()}`,
+        detail: `${capability.file} contains ${capability.matches.slice(0, 3).join(', ')} — none of it ran during the sandbox execution.`,
+        // A regex over source proves the code exists, not that it would run.
+        basis: 'INFERENCE',
+      })
+    }
+    unconfirmed.push(
+      'Whether the unused capabilities are dead code, conditional on an environment we did not reproduce, or deliberately dormant while observed.',
+    )
+  }
+
   if (has((f) => f.kind === 'INFERENCE')) {
     const inference = findings.find((f) => f.kind === 'INFERENCE')!
     reasons.push({
@@ -173,7 +197,9 @@ export function computeVerdict(
       confirmed,
       unconfirmed,
       summary:
-        'The install script did something worth a human look, but nothing that clearly warrants blocking.',
+        dormantCapabilities.length > 0
+          ? 'The install script carries capabilities it did not use while observed. Nothing malicious happened, and that is not the same as nothing being there.'
+          : 'The install script did something worth a human look, but nothing that clearly warrants blocking.',
     }
   }
 
@@ -187,9 +213,11 @@ export function computeVerdict(
       'No sensitive file access observed.',
       'No outbound network connection observed.',
       'No build or deployment configuration modified.',
+      'The install-hook source declares no unused credential or network capability.',
     ],
     unconfirmed: [
       'Only the behaviour exercised during this sandbox run was observed. A script can behave differently under other conditions.',
+      'Static analysis reads the shipped source. Code fetched at runtime cannot be assessed this way.',
     ],
     summary: 'No risky behaviour observed during sandboxed installation.',
   }
