@@ -41,9 +41,10 @@ Each stage may only cite the stage before it. That constraint is the product.
   ┌─────────────────────────────────────────────────────────┐
   │ 1. SANDBOX          modal/inspect_package.py            │
   │    seed canary credentials, run the install hook under  │
-  │    strace, capture execve / openat / read / connect     │
-  └───────────────────────────┬─────────────────────────────┘
-                              ▼   raw events (immutable, stored)
+  │    strace, capture execve / openat / read / connect;    │
+  │    also return each hook's source                       │
+  └────────┬──────────────────┬─────────────────────────────┘
+           │ hook source      ▼   raw events (immutable, stored)
   ┌─────────────────────────────────────────────────────────┐
   │ 2. EVIDENCE         server/pipeline.ts                  │
   │    one plain statement of fact per event, each citing   │
@@ -58,6 +59,12 @@ Each stage may only cite the stage before it. That constraint is the product.
   └───────────────────────────┬─────────────────────────────┘
                               ▼
   ┌─────────────────────────────────────────────────────────┐
+  │ 3b. CAPABILITY      server/static-analysis.ts     ◄─────┘
+  │    what the source *could* do. Never escalates alone —  │
+  │    only unused capability + concealed source does.      │
+  └───────────────────────────┬─────────────────────────────┘
+                              ▼
+  ┌─────────────────────────────────────────────────────────┐
   │ 4. VERDICT          server/verdict.ts                   │
   │    ALLOW / REVIEW / BLOCK — rules, not a model          │
   └───────────────────────────┬─────────────────────────────┘
@@ -68,6 +75,14 @@ Each stage may only cite the stage before it. That constraint is the product.
   │    draft open questions and containment steps           │
   └─────────────────────────────────────────────────────────┘
 ```
+
+Stage 3b is the only one that does not depend on stage 1's _observations_ — it
+reads the artefact instead. It exists because dynamic analysis cannot see a
+package that stays dormant, and it is deliberately the weakest input: it can
+raise ALLOW to REVIEW, never to BLOCK, and only when unused capability
+coincides with obfuscated or runtime-constructed code. Escalating on unused
+capability alone was tried, and it flagged esbuild — see the note in
+`server/static-analysis.ts`.
 
 Raw events are never mutated. Re-running the analysis replaces the
 interpretation, never the ground truth (`clearDerived` in `server/supabase.ts`
@@ -244,6 +259,7 @@ server/
 ├── fixtures.ts      local telemetry — fallback and test fixture
 ├── pipeline.ts      evidence → FACT / CORRELATION / INFERENCE
 ├── supply-chain.ts  named indicators, tuned against false positives
+├── static-analysis.ts  capabilities in hook source; escalates only with concealment
 ├── verdict.ts       ALLOW / REVIEW / BLOCK — rules only
 ├── llm.ts           the single AI call, and its validation gate
 └── index.ts         routes

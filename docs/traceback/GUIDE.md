@@ -287,28 +287,53 @@ here and not 3.
 
 ## 3 · How it decides something is malicious
 
-### First: it does not analyse the package
+### First: the primary evidence is behaviour, not source
 
-This is the most common misunderstanding, so it's worth stating flatly.
-Traceback never looks at:
+The verdict is driven by what the install hook **did**, not by what its code
+looks like. Traceback runs the hook and records what the **operating system
+kernel** observed.
 
-- the source code
-- the file listing
-- the dependency tree
-- file sizes, obfuscation, or any other property of the shipped artefact
+|                  | Reading the source                                                                  | Watching it run (primary)                                  |
+| ---------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Answers          | "what _could_ it do?"                                                               | "what _did_ it do?"                                        |
+| Input            | Source code, file list                                                              | Syscalls the process actually made                         |
+| Can be fooled by | Obfuscation, runtime string assembly, second-stage payloads fetched at install time | Sandbox-aware malware that stays dormant                   |
+| Produces         | "there is an `fs.readFileSync` call here"                                           | "pid 33 opened `/work/.env` and read 31 bytes at 14:23:01" |
 
-It runs the install hook and records what the **operating system kernel**
-observed.
+Seeing `fs.readFileSync` in source tells you nothing about whether it runs, or
+which file it opens. So behaviour wins every time the two disagree, and no
+verdict is ever escalated on source alone.
 
-|                  | Static analysis (not what we do)                                                    | Dynamic analysis (what we do)                                            |
-| ---------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Input            | Source code, file list                                                              | Syscalls the process actually made                                       |
-| Can be fooled by | Obfuscation, runtime string assembly, second-stage payloads fetched at install time | Much harder — a package can lie in its source, it cannot lie to `openat` |
-| Produces         | "there is an `fs.readFileSync` call here"                                           | "pid 33 opened `/work/.env` and read 31 bytes at 14:23:01"               |
+### But source is read too — for the one thing behaviour can't cover
 
-The difference matters: seeing `fs.readFileSync` in source tells you nothing
-about whether it runs, or which file it opens. We wait until it has run and
-record what it actually touched.
+Dynamic analysis has a structural blind spot: **a package that detects the
+sandbox and does nothing produces nothing to observe.** It scores identically
+to a harmless package.
+
+So `server/static-analysis.ts` also scans each lifecycle script's source for
+capabilities — credential access, network, process spawning, runtime code
+construction, packing — citing the literal fragment that matched. The
+interesting question is the cross-check:
+
+|                              | ran it | didn't run it                      |
+| ---------------------------- | ------ | ---------------------------------- |
+| capability, source readable  | BLOCK  | ALLOW — reported, not escalated    |
+| capability, source concealed | BLOCK  | **REVIEW** — dormant payload shape |
+
+**The bottom-right cell is the point.** Code that can read credentials and
+phone home, did neither while watched, and is written so you cannot tell why.
+
+The top-right cell deliberately does _not_ escalate, and that was measured
+rather than assumed. The first version of this rule escalated on any unused
+capability — and it flagged esbuild, whose install hook legitimately carries
+`process.env`, `require("https")` and `execSync` in order to fetch and run a
+platform binary. Nearly every install hook that downloads something looks like
+that. A rule that flags them all is the same cry-wolf failure this whole system
+exists to avoid, so unused capability is reported and left at that. Escalation
+requires it to coincide with concealment.
+
+Static findings are recorded as **capabilities of the artefact, never as
+behaviour** — a regex cannot know whether a code path is reachable.
 
 ### The bait: we plant the credentials ourselves
 
@@ -497,14 +522,22 @@ Open <http://localhost:5173/traceback>
 
 ## 7 · What it will not catch
 
-| Situation                                               | Outcome                                                                                                                    |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Payload is **encrypted** before being sent              | The canary never appears → falls back to **INFERENCE**, verdict becomes `review`. It under-claims rather than over-claims. |
-| Package detects the sandbox and behaves                 | **Missed.** The standard weakness of dynamic analysis.                                                                     |
-| Malicious behaviour happens at `require()`, not install | **Missed.** Only install-time behaviour is observed.                                                                       |
-| Malicious code is in a transitive dependency            | Only the named package's own hooks are detonated today.                                                                    |
+| Situation                                               | Outcome                                                                                                                                                                    |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Payload is **encrypted** before being sent              | The canary never appears → falls back to **INFERENCE**, verdict becomes `review`. It under-claims rather than over-claims.                                                 |
+| Package detects the sandbox and behaves                 | **Partly covered.** Nothing is observed, but if the source is concealed _and_ carries unused capability it becomes `review`. Cleanly-written dormant malware still passes. |
+| Malicious behaviour happens at `require()`, not install | **Missed.** Only install-time behaviour is observed.                                                                                                                       |
+| Malicious code is in a transitive dependency            | Only the named package's own hooks are detonated today.                                                                                                                    |
 
-The first two are inherent to this approach, not tuning problems.
+Only the first is inherent. The second is narrowed by static analysis but not
+closed: a dormant payload written in plain, readable JavaScript is still
+indistinguishable from a package that simply had nothing to do.
+
+**And none of this blocks anything by itself.** Traceback is a gate you have to
+put in front of the install, not a runtime shield. It detonates the hook in a
+disposable sandbox so the verdict arrives _before_ the package touches your
+machine — but if you run `npm install` directly, the hook has already run and
+the answer comes too late. That is a deployment property, not a detection one.
 
 ---
 
