@@ -285,7 +285,8 @@ inference never appears without a correlation beneath it.
 bun run verify    # lint + typecheck + format + 48 tests + build
 ```
 
-Architecture and safety model: **[docs/traceback/README.md](docs/traceback/README.md)**
+Architecture, and exactly where the AI is used: **[docs/architecture.md](docs/architecture.md)**
+Safety model: **[docs/traceback/README.md](docs/traceback/README.md)**
 Status and roadmap: **[docs/todo.md](docs/todo.md)**
 
 ## What's next
