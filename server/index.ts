@@ -13,7 +13,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { env } from './env'
-import { runSimulation } from './simulate'
+import { inspectPackage, runSimulation } from './simulate'
 import { computeVerdict, renderVerdictSection } from './verdict'
 import { generateReport, isLlmConfigured } from './llm'
 import {
@@ -89,6 +89,55 @@ app.post('/api/simulate', async (c) => {
     event_count: events.length,
     telemetry_source: result.source,
     fallback_reason: result.fallbackReason ?? null,
+  })
+})
+
+/**
+ * Inspects a REAL npm package: downloads it with scripts disabled, detonates
+ * its lifecycle hooks in the sandbox under strace, and stores the resulting
+ * telemetry as a new investigation.
+ *
+ * There is deliberately no fallback here. Inventing telemetry for a named
+ * third-party package would be a fabrication about software someone else
+ * published, so an unreachable sandbox is an error, not a degraded result.
+ */
+app.post('/api/inspect', async (c) => {
+  const body = await c.req
+    .json<{ package?: string }>()
+    .catch((): { package?: string } => ({}))
+  const name = body.package?.trim()
+  if (!name || !/^[@a-z0-9._/-]{1,120}$/.test(name)) {
+    return c.json({ error: 'provide a valid npm package name' }, 400)
+  }
+
+  const result = await inspectPackage(name)
+  if (result.error) return c.json({ error: result.error }, 502)
+
+  const scriptCount = Object.keys(result.lifecycleScripts).length
+  const investigation = await createInvestigation(
+    `${result.package}${result.version ? `@${result.version}` : ''} — install-hook inspection`,
+  )
+
+  // A package with no lifecycle scripts has nothing to detonate. That is a
+  // real, useful answer, not a failure.
+  const events =
+    result.events.length > 0
+      ? await insertEvents(investigation.id, result.events)
+      : []
+
+  return c.json({
+    investigation,
+    package: result.package,
+    version: result.version,
+    lifecycle_scripts: result.lifecycleScripts,
+    has_lifecycle_scripts: scriptCount > 0,
+    event_count: events.length,
+    telemetry_source: 'modal',
+    note:
+      result.note ??
+      (scriptCount === 0
+        ? 'No install lifecycle scripts declared — nothing executes at install time.'
+        : null),
   })
 })
 

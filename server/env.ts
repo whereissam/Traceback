@@ -54,6 +54,8 @@ export const env = {
 
   /** Deployed Modal web endpoint for `run_simulation`. */
   modalSimulateUrl: optional('MODAL_SIMULATE_URL'),
+  /** Deployed Modal endpoint that inspects a real npm package. */
+  modalInspectUrl: optional('MODAL_INSPECT_URL'),
   /** Shared secret matching the Modal secret `traceback-sim/SIM_TOKEN`. */
   modalSimulateToken: optional('MODAL_SIMULATE_TOKEN'),
 

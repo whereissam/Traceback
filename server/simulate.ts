@@ -87,3 +87,80 @@ export async function runSimulation(): Promise<SimulationResult> {
     }
   }
 }
+
+/** Result of inspecting a real package pulled from the npm registry. */
+export interface InspectionResult {
+  package: string
+  version: string | null
+  lifecycleScripts: Record<string, string>
+  events: RawTelemetryEvent[]
+  note: string | null
+  error: string | null
+}
+
+/**
+ * Inspects a real npm package: downloads it with scripts disabled, reads its
+ * declared lifecycle hooks, then detonates them under `strace` in the sandbox.
+ *
+ * Unlike `runSimulation`, there is no local fallback — a fabricated result for
+ * a named third-party package would be a lie, so an unreachable sandbox is
+ * reported as an error instead.
+ */
+export async function inspectPackage(name: string): Promise<InspectionResult> {
+  const url = env.modalInspectUrl
+  if (!url || !env.modalSimulateToken) {
+    return {
+      package: name,
+      version: null,
+      lifecycleScripts: {},
+      events: [],
+      note: null,
+      error:
+        'MODAL_INSPECT_URL is not set. Deploy modal/inspect_package.py to inspect real packages.',
+    }
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 300_000)
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: env.modalSimulateToken, package: name }),
+      signal: controller.signal,
+    })
+    if (!response.ok)
+      throw new Error(`sandbox returned HTTP ${response.status}`)
+
+    const payload = (await response.json()) as {
+      package?: string
+      version?: string | null
+      lifecycle_scripts?: Record<string, string>
+      events?: unknown
+      note?: string
+      error?: string
+    }
+
+    return {
+      package: payload.package ?? name,
+      version: payload.version ?? null,
+      lifecycleScripts: payload.lifecycle_scripts ?? {},
+      events: Array.isArray(payload.events)
+        ? payload.events.filter(isRawEvent)
+        : [],
+      note: payload.note ?? null,
+      error: payload.error ?? null,
+    }
+  } catch (error) {
+    return {
+      package: name,
+      version: null,
+      lifecycleScripts: {},
+      events: [],
+      note: null,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
