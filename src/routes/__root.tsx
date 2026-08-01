@@ -12,8 +12,15 @@ export const Route = createRootRoute({
             <div className="flex items-center space-x-4 md:space-x-8">
               <Link
                 to="/"
-                className="text-foreground hover:text-primary text-lg font-semibold transition-colors"
+                className="text-foreground hover:text-primary flex items-center gap-2 text-lg font-semibold transition-colors"
               >
+                <img
+                  src="/traceback-mark.png"
+                  alt=""
+                  width="24"
+                  height="24"
+                  className="h-6 w-6"
+                />
                 Traceback
               </Link>
               <div className="hidden space-x-6 sm:flex">

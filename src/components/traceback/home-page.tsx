@@ -35,9 +35,13 @@ export function HomePage() {
       <div className="container mx-auto max-w-5xl px-4 py-16">
         <section className="mb-16 text-center">
           <div className="mb-6 flex justify-center">
-            <div className="bg-primary/10 rounded-full p-3">
-              <ScanSearch className="text-primary h-8 w-8 sm:h-12 sm:w-12" />
-            </div>
+            <img
+              src="/traceback-mark.png"
+              alt="Traceback"
+              width="112"
+              height="112"
+              className="h-20 w-20 sm:h-28 sm:w-28"
+            />
           </div>
 
           <h1 className="text-foreground mb-4 text-3xl font-bold sm:text-4xl md:text-5xl">

@@ -2,16 +2,34 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="/traceback-mark.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#c96442" />
+
+    <!-- Open Graph / Twitter -->
+    <meta property="og:type" content="website" />
     <meta
-      name="description"
-      content="A modern, production-ready React template with TailwindCSS, TanStack Router, TypeScript, and best practices built-in."
+      property="og:title"
+      content="Traceback — a security gate for AI-installed npm packages"
     />
-    <title>Traceback — AI-Assisted Digital Forensics</title>
+    <meta
+      property="og:description"
+      content="Runs a package's install hook in an isolated sandbox, records what it actually does, and returns ALLOW / REVIEW / BLOCK — every claim labelled FACT, CORRELATION, or INFERENCE."
+    />
+    <meta property="og:image" content="/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Traceback" />
+    <meta
+      name="twitter:description"
+      content="Do not trust what the package says. Observe what it does."
+    />
+    <meta name="twitter:image" content="/og-image.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Traceback — a security gate for AI-installed npm packages</title>
     <meta
       name="description"
-      content="Traceback turns fragmented telemetry into an evidence-backed incident timeline, labelling every claim FACT, CORRELATION, or INFERENCE."
+      content="Runs a package's install hook in an isolated sandbox, records what it actually does, and returns ALLOW / REVIEW / BLOCK — every claim labelled FACT, CORRELATION, or INFERENCE."
     />
   </head>
   <body>

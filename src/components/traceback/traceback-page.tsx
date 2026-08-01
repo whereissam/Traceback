@@ -1,10 +1,5 @@
 import { useCallback, useState } from 'react'
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ScanSearch,
-  ShieldAlert,
-} from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react'
 import { Banner } from '@/components/traceback/banner'
 import { Controls, type Stage } from '@/components/traceback/controls'
 import { InspectPanel } from '@/components/traceback/inspect-panel'
@@ -136,9 +131,13 @@ export function TracebackPage() {
       <div className="container mx-auto max-w-5xl px-4 py-10">
         <header className="mb-8">
           <div className="mb-3 flex items-center gap-3">
-            <div className="bg-primary/10 rounded-lg p-2">
-              <ScanSearch className="text-primary h-6 w-6" />
-            </div>
+            <img
+              src="/traceback-mark.png"
+              alt=""
+              width="40"
+              height="40"
+              className="h-10 w-10"
+            />
             <h1 className="text-foreground text-3xl font-bold tracking-tight">
               Traceback
             </h1>

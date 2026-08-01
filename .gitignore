@@ -43,7 +43,8 @@ __pycache__/
 docs/traceback/PITCH-zh.md
 docs/traceback/GUIDE-zh.md
 
-# Playwright MCP scratch output (screenshots, page snapshots, console logs)
+# Playwright MCP scratch output (screenshots, page snapshots, console logs).
+# Only loose screenshots dropped at the repo root — never public/ or landing/
+# assets, which are real deliverables.
 .playwright-mcp/
-*.png
-!landing/**/*.png
+/*.png
