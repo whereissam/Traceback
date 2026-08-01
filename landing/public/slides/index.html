@@ -59,7 +59,12 @@
         background: var(--bg);
         color: var(--ink);
         font-family:
-          ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
         line-height: 1.5;
         -webkit-font-smoothing: antialiased;
       }
@@ -425,7 +430,9 @@
             Your agent asks to run <code>npm install</code>.<br />That is not
             what you're approving.
           </h2>
-          <pre class="term reveal"><code>{ "scripts": { "postinstall": "node postinstall.js" } }</code></pre>
+          <pre
+            class="term reveal"
+          ><code>{ "scripts": { "postinstall": "node postinstall.js" } }</code></pre>
           <p class="reveal" style="margin-top: 1rem">
             npm runs that automatically. It can read <code>.env</code> or
             <code>~/.ssh</code>, call out to the network, and rewrite
@@ -435,12 +442,13 @@
         </div>
       </section>
 
-
       <!-- 3 · how it works -->
       <section class="slide">
         <div class="inner">
           <div class="eyebrow reveal">How it works</div>
-          <h2 class="reveal">The hook runs in a sandbox, never on your machine</h2>
+          <h2 class="reveal">
+            The hook runs in a sandbox, never on your machine
+          </h2>
 
           <div class="pipe reveal">
             <div class="step">
@@ -450,7 +458,9 @@
             <div class="chev">&rsaquo;</div>
             <div class="step">
               <span class="k" style="color: var(--primary)">2 · Detonate</span>
-              <span class="v">Run the hook in an isolated sandbox with a seeded canary</span>
+              <span class="v"
+                >Run the hook in an isolated sandbox with a seeded canary</span
+              >
             </div>
             <div class="chev">&rsaquo;</div>
             <div class="step">
@@ -490,7 +500,6 @@
         </div>
       </section>
 
-
       <!-- 4 · how you'd actually use it -->
       <section class="slide">
         <div class="inner">
@@ -505,7 +514,9 @@
                 The sandbox, the correlation pipeline and the verdict run today,
                 behind an HTTP API. That is the hard part, and it is done.
               </p>
-              <code>POST /api/simulate → POST /api/investigate/:id → verdict</code>
+              <code
+                >POST /api/simulate → POST /api/investigate/:id → verdict</code
+              >
             </div>
           </div>
 
@@ -548,7 +559,9 @@
         <div class="inner">
           <div class="eyebrow reveal">What you start with</div>
           <h2 class="reveal">Six events. Each one true.</h2>
-          <pre class="term reveal"><code>process_start   npm install unknown-analytics-helper@1.4.2   pid 5
+          <pre
+            class="term reveal"
+          ><code>process_start   npm install unknown-analytics-helper@1.4.2   pid 5
 process_start   node postinstall.js                          pid 7  <span class="arrow">←</span> parent 5
 file_read       /app/.env                                    pid 7
 network_out     …traceback-sim-collector.modal.run           pid 7
@@ -565,7 +578,7 @@ git_modify      .github/workflows/deploy.yml                 pid 7</code></pre>
         <div class="inner">
           <div class="eyebrow reveal">The idea</div>
           <h2 class="reveal">Rank every claim by how much it asserts</h2>
-          <div class="grid g3 reveal">
+          <div class="g3 reveal grid">
             <div class="card">
               <span class="badge b-fact">FACT</span>
               <p style="margin-top: 0.5rem">Directly observed in telemetry.</p>
@@ -601,7 +614,9 @@ git_modify      .github/workflows/deploy.yml                 pid 7</code></pre>
             before the install runs. If it appears in what leaves the container,
             transmission is <em>observed</em>.
           </p>
-          <pre class="term reveal"><code><span class="muted">without the canary</span>
+          <pre
+            class="term reveal"
+          ><code><span class="muted">without the canary</span>
 <span class="badge b-inf">INFERENCE</span>  Possible credential exfiltration        <span class="muted">medium</span>
 
 <span class="muted">with it</span>
@@ -634,7 +649,7 @@ git_modify      .github/workflows/deploy.yml                 pid 7</code></pre>
                 Deployment configuration modified by a lifecycle script</span
               >
             </p>
-            <div class="grid g2">
+            <div class="g2 grid">
               <div>
                 <div class="col-h" style="color: var(--fact)">CONFIRMED</div>
                 <ul class="plain">
@@ -660,9 +675,11 @@ git_modify      .github/workflows/deploy.yml                 pid 7</code></pre>
       <!-- 7 · the model can't invent -->
       <section class="slide">
         <div class="inner">
-          <div class="eyebrow reveal">Why it isn't a model summarising logs</div>
+          <div class="eyebrow reveal">
+            Why it isn't a model summarising logs
+          </div>
           <h2 class="reveal">The model cannot invent events</h2>
-          <div class="grid g2 reveal">
+          <div class="g2 reveal grid">
             <div class="card">
               <h3>It never sees raw telemetry</h3>
               <p>
@@ -697,7 +714,7 @@ git_modify      .github/workflows/deploy.yml                 pid 7</code></pre>
         <div class="inner">
           <div class="eyebrow reveal">Honest limits</div>
           <h2 class="reveal">What it cannot establish</h2>
-          <div class="grid g2 reveal">
+          <div class="g2 reveal grid">
             <div class="card">
               <h3>Telemetry is self-reported</h3>
               <p>
@@ -804,11 +821,9 @@ git_modify      .github/workflows/deploy.yml                 pid 7</code></pre>
 
           // Touch: a deliberate vertical swipe pages; small moves are ignored.
           let y0 = null
-          addEventListener(
-            'touchstart',
-            (e) => (y0 = e.touches[0].clientY),
-            { passive: true },
-          )
+          addEventListener('touchstart', (e) => (y0 = e.touches[0].clientY), {
+            passive: true,
+          })
           addEventListener(
             'touchend',
             (e) => {

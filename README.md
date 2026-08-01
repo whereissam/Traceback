@@ -153,6 +153,58 @@ by environment, can fetch a second-stage payload, and can hide the behaviour in 
 dependency. Traceback observes what the package _did_ when it ran. The two signals
 combine well; this is the dynamic half.
 
+## How you'd actually use it
+
+The obvious question — _do I install something? is it a CLI? does my agent call
+it?_ Three delivery paths, tagged honestly:
+
+### ✅ Built today — the inspection engine, behind an HTTP API
+
+The sandbox, the correlation pipeline, the canary, and the verdict all work.
+That's the hard part, and it's done. Anything can drive it:
+
+```bash
+curl -X POST localhost:8787/api/simulate            # detonate, collect telemetry
+curl -X POST localhost:8787/api/investigate/:id     # correlate → verdict
+# → {"verdict":"block","risk":"high","finding_counts":{"FACT":7,...}}
+```
+
+The engine is **package-agnostic** — the pipeline consumes normalised events, so
+pointing it at a different package is an input change, not a rewrite. The demo
+uses a controlled malicious package so the behaviour is reproducible on stage.
+
+### ⏳ Next — a wrapper you type instead of `npm install`
+
+```bash
+npx traceback install analytics-helper
+```
+
+Downloads with `--ignore-scripts` so nothing executes locally, reads the
+lifecycle scripts out of `package.json`, detonates them in the sandbox, and only
+lets them run on your machine if the verdict allows it.
+
+**Not built.** The sandbox half exists; the local interception doesn't.
+
+### ⏳ Next — an MCP server your agent consults
+
+```
+agent → inspect_package("analytics-helper") → allow / review / block
+```
+
+Cursor or Claude Code asks Traceback _before_ proposing the install, so the gate
+sits **inside** the agent loop rather than beside it. This is the shape that
+matches the problem best — the agent is the thing installing packages, so it
+should be the thing asking.
+
+**Not built.** It's an adapter over the API above, not new analysis.
+
+### So what runs right now?
+
+A local web app plus an API. You click **Run simulation**, a real Modal sandbox
+executes a real install hook, and you get a real verdict in about ten seconds.
+What's missing is the plumbing that puts that gate in front of _your_ everyday
+`npm install` — which is integration work, not research.
+
 ## What's real, and what's simulated
 
 Worth being precise about, since "AI security demo" invites suspicion:
