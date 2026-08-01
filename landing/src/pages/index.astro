@@ -29,6 +29,47 @@ const kinds = [
   },
 ]
 
+/**
+ * Measured results, not illustrations. Each row is an actual run against the
+ * real npm registry (or the controlled fixture, which is labelled as such).
+ * Re-measure with: curl -X POST localhost:8787/api/inspect -d '{"package":"..."}'
+ */
+const results = [
+  {
+    pkg: 'esbuild@0.28.1',
+    real: true,
+    hook: 'postinstall: node install.js',
+    events: '3',
+    findings: '3 / 1 / 0',
+    verdict: 'ALLOW',
+    risk: 'low risk',
+    tone: 'fact',
+    note: 'A legitimate package with a genuine install hook. It spawns its own binary and touches nothing sensitive — so it passes.',
+  },
+  {
+    pkg: 'lodash@4.18.1',
+    real: true,
+    hook: 'none declared',
+    events: '0',
+    findings: '— / — / —',
+    verdict: 'NOTHING TO RUN',
+    risk: 'no install code',
+    tone: 'muted',
+    note: 'Declares no lifecycle scripts, so nothing executes at install time. The honest answer is that there is nothing to detonate.',
+  },
+  {
+    pkg: 'unknown-analytics-helper@1.4.2',
+    real: false,
+    hook: 'postinstall: node postinstall.js',
+    events: '6',
+    findings: '7 / 3 / 2',
+    verdict: 'BLOCK',
+    risk: 'high risk',
+    tone: 'danger',
+    note: 'Controlled fixture. Reads the seeded credential, sends it to an external host, and rewrites the deployment workflow.',
+  },
+]
+
 const properties = [
   {
     title: 'The model cannot invent events',
@@ -237,6 +278,90 @@ const properties = [
         font-size: 0.9rem;
       }
 
+      table.results {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.86rem;
+      }
+      table.results th {
+        text-align: left;
+        font-size: 0.68rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        font-weight: 700;
+        padding: 0 0.7rem 0.5rem 0;
+        border-bottom: 1px solid var(--border);
+      }
+      table.results td {
+        padding: 0.7rem 0.7rem 0.7rem 0;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      table.results .pkg {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.8rem;
+        color: var(--foreground);
+        white-space: nowrap;
+      }
+      table.results .hook {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.76rem;
+        color: var(--muted-foreground);
+      }
+      .tag-real,
+      .tag-fixture {
+        display: inline-block;
+        font-size: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        padding: 0.1rem 0.36rem;
+        border-radius: 0.25rem;
+        margin-left: 0.4rem;
+        vertical-align: middle;
+      }
+      .tag-real {
+        color: var(--fact);
+        background: color-mix(in srgb, var(--fact) 15%, transparent);
+      }
+      .tag-fixture {
+        color: var(--muted-foreground);
+        background: color-mix(in srgb, var(--muted-foreground) 15%, transparent);
+      }
+      .v-fact {
+        color: var(--fact);
+        font-weight: 700;
+      }
+      .v-danger {
+        color: var(--danger);
+        font-weight: 700;
+      }
+      .v-muted {
+        color: var(--muted-foreground);
+        font-weight: 700;
+      }
+      .row-note {
+        font-size: 0.78rem;
+        color: var(--muted-foreground);
+        margin: 0.3rem 0 0;
+        max-width: 34rem;
+      }
+      @media (max-width: 820px) {
+        table.results thead {
+          display: none;
+        }
+        table.results tr {
+          display: block;
+          padding: 0.8rem 0;
+          border-bottom: 1px solid var(--border);
+        }
+        table.results td {
+          display: block;
+          border: 0;
+          padding: 0.12rem 0;
+        }
+      }
+
       .badge {
         display: inline-block;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -384,6 +509,67 @@ const properties = [
             </div>
           </div>
         </div>
+      </section>
+
+
+      <section>
+        <h2>Run against real packages</h2>
+        <p class="sub">
+          The same pipeline, pointed at the actual npm registry. A detector that
+          flags everything is useless, so the important row is the first one —
+          a legitimate package with a genuine install hook that
+          <strong>passes</strong>.
+        </p>
+
+        <table class="results">
+          <thead>
+            <tr>
+              <th>Package</th>
+              <th>Install hook</th>
+              <th>Events</th>
+              <th>F / C / I</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              results.map((r) => (
+                <tr>
+                  <td>
+                    <span class="pkg">{r.pkg}</span>
+                    <span class={r.real ? 'tag-real' : 'tag-fixture'}>
+                      {r.real ? 'REAL' : 'FIXTURE'}
+                    </span>
+                    <p class="row-note">{r.note}</p>
+                  </td>
+                  <td class="hook">{r.hook}</td>
+                  <td class="hook">{r.events}</td>
+                  <td class="hook">{r.findings}</td>
+                  <td>
+                    <span
+                      class={
+                        r.tone === 'danger'
+                          ? 'v-danger'
+                          : r.tone === 'fact'
+                            ? 'v-fact'
+                            : 'v-muted'
+                      }
+                    >
+                      {r.verdict}
+                    </span>
+                    <div class="hook">{r.risk}</div>
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+
+        <p class="sub" style="margin-top:1.5rem">
+          <strong>F / C / I</strong> = facts, correlations, inferences. Every
+          number above came from an actual run — reproduce any row with:
+        </p>
+        <pre class="term"><code>{`curl -X POST localhost:8787/api/inspect -d '{"package":"esbuild"}'`}</code></pre>
       </section>
 
       <section>

@@ -1,6 +1,11 @@
 /** Browser-side client for the Traceback API. */
 
-import type { Finding, Investigation, InvestigationReport } from './types'
+import type {
+  Finding,
+  Investigation,
+  InvestigationReport,
+  Verdict,
+} from './types'
 
 /** Vite proxies /api to the Hono server in dev; same-origin in production. */
 const BASE = '/api'
@@ -36,6 +41,9 @@ export interface InvestigateResponse {
   evidence_count: number
   finding_counts: { FACT: number; CORRELATION: number; INFERENCE: number }
   timeline_phases: number
+  supply_chain_detected: boolean
+  verdict: Verdict
+  risk: 'high' | 'medium' | 'low'
   generated_by: string
 }
 
@@ -43,6 +51,24 @@ export function runSimulation(title?: string) {
   return request<SimulateResponse>('/simulate', {
     method: 'POST',
     body: JSON.stringify({ title }),
+  })
+}
+
+export interface InspectResponse {
+  investigation: Investigation
+  package: string
+  version: string | null
+  lifecycle_scripts: Record<string, string>
+  has_lifecycle_scripts: boolean
+  event_count: number
+  note: string | null
+}
+
+/** Inspect a real package pulled from the npm registry. */
+export function inspectPackage(name: string) {
+  return request<InspectResponse>('/inspect', {
+    method: 'POST',
+    body: JSON.stringify({ package: name }),
   })
 }
 

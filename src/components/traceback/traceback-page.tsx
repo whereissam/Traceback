@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { Banner } from '@/components/traceback/banner'
 import { Controls, type Stage } from '@/components/traceback/controls'
+import { InspectPanel } from '@/components/traceback/inspect-panel'
 import { KindBadge } from '@/components/traceback/kind-badge'
 import { RawEvents } from '@/components/traceback/raw-events'
 import { SupplyChainBanner } from '@/components/traceback/supply-chain-banner'
@@ -15,6 +16,7 @@ import { ReportBlock } from '@/components/traceback/report-block'
 import { Timeline } from '@/components/traceback/timeline'
 import {
   fetchInvestigation,
+  inspectPackage,
   runInvestigation,
   runSimulation,
 } from '@/lib/traceback/api'
@@ -27,6 +29,8 @@ export function TracebackPage() {
   const [fallbackReason, setFallbackReason] = useState<string | null>(null)
   const [generatedBy, setGeneratedBy] = useState<string | null>(null)
   const [data, setData] = useState<InvestigationReport | null>(null)
+  const [inspectBusy, setInspectBusy] = useState(false)
+  const [inspectStatus, setInspectStatus] = useState<string | null>(null)
 
   const load = useCallback(async (id: string) => {
     setData(await fetchInvestigation(id))
@@ -48,6 +52,65 @@ export function TracebackPage() {
       setStage('idle')
     }
   }, [load])
+
+  /**
+   * Inspect a real package end to end: fetch + detonate in the sandbox, then
+   * immediately run the pipeline, because a package name with no verdict
+   * attached answers nothing.
+   */
+  const onInspect = useCallback(
+    async (name: string) => {
+      setError(null)
+      setData(null)
+      setGeneratedBy(null)
+      setTelemetrySource(null)
+      setInspectBusy(true)
+      setStage('simulating')
+      setInspectStatus(
+        `Fetching ${name} from npm and detonating its install hooks…`,
+      )
+      try {
+        const result = await inspectPackage(name)
+        const label = `${result.package}${result.version ? `@${result.version}` : ''}`
+
+        if (!result.has_lifecycle_scripts) {
+          // A real, useful answer — not a failure.
+          setInspectStatus(
+            `${label} declares no install lifecycle scripts, so nothing executes at install time. Nothing to detonate.`,
+          )
+          setTelemetrySource('modal')
+          await load(result.investigation.id)
+          setStage('raw')
+          return
+        }
+
+        const hooks = Object.entries(result.lifecycle_scripts)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(' · ')
+        setInspectStatus(
+          `${label} — ${hooks}. Captured ${result.event_count} syscall-derived events. Analysing…`,
+        )
+        setTelemetrySource('modal')
+        await load(result.investigation.id)
+
+        setStage('analysing')
+        const analysis = await runInvestigation(result.investigation.id)
+        setGeneratedBy(analysis.generated_by)
+        await load(result.investigation.id)
+        setStage('done')
+        setInspectStatus(
+          `${label} — ${hooks}. Verdict: ${analysis.verdict.toUpperCase()} (${analysis.risk} risk).`,
+        )
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause))
+        setInspectStatus(null)
+        setStage('idle')
+      } finally {
+        setInspectBusy(false)
+      }
+    },
+    [load],
+  )
 
   const onInvestigate = useCallback(async () => {
     if (!data) return
@@ -86,6 +149,12 @@ export function TracebackPage() {
             instead of reconstructing the story from scratch.
           </p>
         </header>
+
+        <InspectPanel
+          onInspect={onInspect}
+          busy={inspectBusy}
+          status={inspectStatus}
+        />
 
         <Controls
           stage={stage}
