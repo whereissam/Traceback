@@ -116,6 +116,18 @@ const properties = [
         padding: 5rem 0 3rem;
         text-align: center;
       }
+      .logo {
+        display: block;
+        margin: 0 auto 1.5rem;
+        width: 132px;
+        height: auto;
+      }
+      /* The mark is drawn in dark ink; lift it on a dark background. */
+      @media (prefers-color-scheme: dark) {
+        .logo {
+          filter: invert(1) hue-rotate(180deg);
+        }
+      }
       .eyebrow {
         display: inline-block;
         font-size: 0.75rem;
@@ -285,6 +297,13 @@ const properties = [
   <body>
     <div class="wrap">
       <header>
+        <img
+          src="/traceback-logo.png"
+          alt="Traceback"
+          width="132"
+          height="132"
+          class="logo"
+        />
         <span class="eyebrow">Runtime inspection for npm install hooks</span>
         <h1>Do not trust what the package says.<br />Observe what it does.</h1>
         <p class="lede">
