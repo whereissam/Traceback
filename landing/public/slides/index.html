@@ -206,6 +206,75 @@
         background: color-mix(in srgb, var(--inference) 16%, transparent);
       }
 
+      /* 2x2 cross-check: what the source can do vs. what it did. */
+      .matrix {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) 1fr 1fr;
+        gap: clamp(0.3rem, 0.9vh, 0.55rem);
+        font-size: clamp(0.66rem, 1.35vw, 0.88rem);
+      }
+      .matrix > * {
+        padding: clamp(0.5rem, 1.5vh, 0.85rem);
+        border-radius: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .matrix .hd {
+        font-weight: 700;
+        opacity: 0.62;
+        font-size: clamp(0.6rem, 1.15vw, 0.76rem);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding-bottom: 0;
+      }
+      .matrix .rowhd {
+        font-weight: 600;
+        opacity: 0.8;
+        align-items: flex-start;
+      }
+      .matrix .cell {
+        border: 1px solid var(--border);
+        background: var(--card);
+        font-weight: 700;
+      }
+      .matrix .cell small {
+        display: block;
+        font-weight: 400;
+        opacity: 0.65;
+        margin-top: 0.2rem;
+        font-size: 0.82em;
+      }
+      .m-block {
+        color: var(--danger);
+        border-color: color-mix(
+          in srgb,
+          var(--danger) 40%,
+          transparent
+        ) !important;
+        background: color-mix(
+          in srgb,
+          var(--danger) 8%,
+          transparent
+        ) !important;
+      }
+      .m-allow {
+        color: var(--fact);
+      }
+      .m-review {
+        color: var(--inference);
+        border-color: color-mix(
+          in srgb,
+          var(--inference) 55%,
+          transparent
+        ) !important;
+        background: color-mix(
+          in srgb,
+          var(--inference) 11%,
+          transparent
+        ) !important;
+      }
+
       .verdict {
         border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
         background: color-mix(in srgb, var(--danger) 9%, transparent);
@@ -828,18 +897,56 @@ git_modify      .github/workflows/deploy.yml                 pid 7</code></pre>
         </div>
       </section>
 
-      <!-- 8 · limits -->
+      <!-- 8 · static cross-check -->
+      <section class="slide">
+        <div class="inner">
+          <div class="eyebrow reveal">The blind spot</div>
+          <h2 class="reveal">
+            A package that stays dormant does nothing to see
+          </h2>
+          <p class="reveal" style="max-width: 62ch">
+            So the hook's source is read too — not to judge it, but to ask what
+            it <em>could</em> do. The cross-check is the whole point:
+          </p>
+          <div class="matrix reveal" style="margin-top: 0.9rem">
+            <div class="hd"></div>
+            <div class="hd">ran it</div>
+            <div class="hd">didn't run it</div>
+
+            <div class="rowhd">source readable</div>
+            <div class="cell m-block">BLOCK<small>observed</small></div>
+            <div class="cell m-allow">
+              ALLOW<small>reported, not escalated</small>
+            </div>
+
+            <div class="rowhd">source concealed</div>
+            <div class="cell m-block">BLOCK<small>observed</small></div>
+            <div class="cell m-review">
+              REVIEW<small>dormant payload shape</small>
+            </div>
+          </div>
+          <p class="reveal" style="margin-top: 1rem; max-width: 66ch">
+            The first version escalated on <em>any</em> unused capability — and
+            it flagged esbuild, whose install hook legitimately carries
+            <code>process.env</code>, <code>https</code> and
+            <code>execSync</code> to fetch a platform binary. Nearly every real
+            install hook looks like that. Measured, then narrowed.
+          </p>
+        </div>
+      </section>
+
+      <!-- 9 · limits -->
       <section class="slide">
         <div class="inner">
           <div class="eyebrow reveal">Honest limits</div>
           <h2 class="reveal">What it cannot establish</h2>
           <div class="g2 reveal grid">
             <div class="card">
-              <h3>Telemetry is self-reported</h3>
+              <h3>Detection is not blocking</h3>
               <p>
-                Not captured from the kernel yet. Syscall capture is the next
-                step, and would make the evidence independent of the script's
-                own account of itself.
+                The verdict only arrives in time if this runs
+                <em>before</em> <code>npm install</code>. Run the install
+                directly and the hook has already executed.
               </p>
             </div>
             <div class="card">
@@ -858,7 +965,7 @@ git_modify      .github/workflows/deploy.yml                 pid 7</code></pre>
         </div>
       </section>
 
-      <!-- 9 · close -->
+      <!-- 10 · close -->
       <section class="slide" style="text-align: center">
         <div class="inner" style="align-items: center">
           <img
