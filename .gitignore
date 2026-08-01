@@ -30,3 +30,8 @@ dist-ssr
 
 # Local Claude Code config (hooks, skills, settings)
 .claude/
+
+# Python artefacts (modal/)
+__pycache__/
+*.py[cod]
+.venv/
