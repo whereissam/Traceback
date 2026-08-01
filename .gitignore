@@ -38,3 +38,6 @@ __pycache__/
 
 # Astro build cache (landing/)
 .astro/
+
+# Backstage pitch notes — local only, not for the public repo
+docs/traceback/PITCH-zh.md
