@@ -1,0 +1,57 @@
+# Traceback
+
+> AI-assisted digital forensics that turns fragmented telemetry into an
+> evidence-backed incident timeline. Every claim is labelled FACT, CORRELATION,
+> or INFERENCE and links back to the raw event ids it came from.
+>
+> Built on a React 19 / Vite / TanStack starter with a Hono API server on Bun.
+
+This file follows the [llms.txt](https://llmstxt.org) convention: a concise map
+for AI agents. Full conventions are in AGENTS.md.
+
+## Stack
+
+- React 19 + TypeScript (strict)
+- Vite (build/dev), TanStack Router (file-based, `src/routes/`), TanStack Query
+- TailwindCSS v4 + shadcn/ui on Base UI primitives
+- Hono API server on Bun (`server/`)
+- Supabase (Postgres, RLS enabled) for investigation state
+- Modal (Python, `modal/`) for sandboxed telemetry simulation
+- OpenAI for report generation, constrained to arranging derived findings
+- Vitest + Testing Library (jsdom)
+
+## Conventions
+
+- [AGENTS.md](./AGENTS.md): canonical conventions, commands, structure, checklist
+- Use `bun`/`bunx`, never `npm`/`npx`
+- Run `bun run verify` (lint + typecheck + format + test + build) before "done"
+- `src/routeTree.gen.ts` is generated — never edit by hand
+- Secrets are server-side only; never use a `VITE_` prefix for them
+
+## Domain rules
+
+- Findings are FACT, CORRELATION, or INFERENCE. An INFERENCE must cite the
+  correlations under it and is only ever confirmed by a human.
+- The LLM never sees raw telemetry and cannot invent events: it references
+  findings by id, and unknown ids are discarded before any write.
+- Missing integrations degrade rather than break, and fallbacks are labelled.
+
+## Entry points
+
+- `src/main.tsx`: app entry
+- `src/routes/__root.tsx`: root layout
+- `src/routes/traceback.tsx`: investigation UI route
+- `src/index.css`: Tailwind + design tokens (incl. evidence-tier tokens)
+- `server/index.ts`: API routes
+- `server/pipeline.ts`: correlation pipeline (pure functions, unit-tested)
+- `server/llm.ts`: constrained report generation
+- `modal/modal_sim.py`: sandboxed simulation
+
+## Optional
+
+- [README.md](./README.md): human-facing setup and product overview
+- [docs/traceback/README.md](./docs/traceback/README.md): architecture and safety model
+- [docs/traceback/schema.sql](./docs/traceback/schema.sql): database schema
+- [docs/todo.md](./docs/todo.md): status, known limitations, roadmap
+- [docs/design-system.md](./docs/design-system.md): styling and design tokens
+- [.env.example](./.env.example): configuration, and why nothing is `VITE_`-prefixed
