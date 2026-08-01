@@ -87,8 +87,12 @@ export function TracebackPage() {
         const hooks = Object.entries(result.lifecycle_scripts)
           .map(([k, v]) => `${k}: ${v}`)
           .join(' · ')
+        // Never let the fixture read as though it came from npm.
+        const origin = result.is_fixture
+          ? 'controlled fixture, not from npm'
+          : 'from npm'
         setInspectStatus(
-          `${label} — ${hooks}. Captured ${result.event_count} syscall-derived events. Analysing…`,
+          `${label} (${origin}) — ${hooks}. Captured ${result.event_count} events. Analysing…`,
         )
         setTelemetrySource('modal')
         await load(result.investigation.id)
@@ -99,7 +103,7 @@ export function TracebackPage() {
         await load(result.investigation.id)
         setStage('done')
         setInspectStatus(
-          `${label} — ${hooks}. Verdict: ${analysis.verdict.toUpperCase()} (${analysis.risk} risk).`,
+          `${label} (${origin}) — ${hooks}. Verdict: ${analysis.verdict.toUpperCase()} (${analysis.risk} risk).`,
         )
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : String(cause))

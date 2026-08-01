@@ -42,3 +42,8 @@ __pycache__/
 # Chinese working notes — local only, not for the public repo
 docs/traceback/PITCH-zh.md
 docs/traceback/GUIDE-zh.md
+
+# Playwright MCP scratch output (screenshots, page snapshots, console logs)
+.playwright-mcp/
+*.png
+!landing/**/*.png

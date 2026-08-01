@@ -62,6 +62,8 @@ export interface InspectResponse {
   has_lifecycle_scripts: boolean
   event_count: number
   note: string | null
+  /** True when this is the controlled fixture, not a package from npm. */
+  is_fixture?: boolean
 }
 
 /** Inspect a real package pulled from the npm registry. */

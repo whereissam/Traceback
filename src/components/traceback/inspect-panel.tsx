@@ -15,12 +15,18 @@ import { cn } from '@/lib/utils'
 interface Suggestion {
   name: string
   why: string
+  /** Marks the controlled fixture so it is never mistaken for a real package. */
+  danger?: boolean
 }
 
 const SUGGESTIONS: Suggestion[] = [
-  { name: 'esbuild', why: 'real postinstall hook — should pass' },
-  { name: 'lodash', why: 'no install scripts at all' },
-  { name: 'sharp', why: 'downloads a native binary' },
+  { name: 'esbuild', why: 'real package, genuine postinstall hook → ALLOW' },
+  { name: 'lodash', why: 'real package, no install scripts → nothing to run' },
+  {
+    name: 'unknown-analytics-helper',
+    why: 'controlled fixture, deliberately malicious → BLOCK',
+    danger: true,
+  },
 ]
 
 export function InspectPanel({
@@ -88,11 +94,15 @@ export function InspectPanel({
             }}
             title={s.why}
             className={cn(
-              'border-border hover:border-primary hover:text-primary rounded-full border px-2.5 py-1 font-mono text-xs transition-colors',
+              'rounded-full border px-2.5 py-1 font-mono text-xs transition-colors',
+              s.danger
+                ? 'border-danger/50 text-danger hover:border-danger'
+                : 'border-border hover:border-primary hover:text-primary',
               busy && 'pointer-events-none opacity-50',
             )}
           >
             {s.name}
+            {s.danger && <span className="ml-1 not-italic">⚠</span>}
           </button>
         ))}
       </div>

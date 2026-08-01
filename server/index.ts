@@ -46,6 +46,17 @@ import type {
   VerdictResult,
 } from '../src/lib/traceback/types'
 
+/**
+ * The controlled malicious package, addressable by name so a reviewer can type
+ * it into the same box as a real package and watch the identical pipeline reach
+ * the opposite verdict.
+ */
+const FIXTURE_LABEL = 'unknown-analytics-helper@1.4.2'
+const FIXTURE_NAMES = new Set([
+  'unknown-analytics-helper',
+  'unknown-analytics-helper@1.4.2',
+])
+
 const app = new Hono()
 
 app.use('/api/*', cors())
@@ -108,6 +119,28 @@ app.post('/api/inspect', async (c) => {
   const name = body.package?.trim()
   if (!name || !/^[@a-z0-9._/-]{1,120}$/.test(name)) {
     return c.json({ error: 'provide a valid npm package name' }, 400)
+  }
+
+  // The malicious fixture is reachable by name from the same input as a real
+  // package, so one box can demonstrate both outcomes. It is not fetched from
+  // npm — the response says so, and the UI labels it.
+  if (FIXTURE_NAMES.has(name)) {
+    const result = await runSimulation()
+    const investigation = await createInvestigation(
+      `${FIXTURE_LABEL} — install-hook inspection (fixture)`,
+    )
+    const events = await insertEvents(investigation.id, result.events)
+    return c.json({
+      investigation,
+      package: FIXTURE_LABEL,
+      version: '1.4.2',
+      lifecycle_scripts: { postinstall: 'node postinstall.js' },
+      has_lifecycle_scripts: true,
+      event_count: events.length,
+      telemetry_source: result.source,
+      is_fixture: true,
+      note: 'Controlled fixture — written by us, not fetched from npm. Its behaviour is deliberately malicious so the same pipeline can be shown producing a BLOCK.',
+    })
   }
 
   const result = await inspectPackage(name)
