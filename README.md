@@ -147,11 +147,17 @@ its uncertainty is more dangerous than one that has none.
 Traceback asks _"what does the third-party code triggered by that command do?"_
 It protects against the indirect execution, not the command.
 
-**vs. a static package scanner.** Static analysis reads the source: `fs.readFile`,
+**vs. a static package scanner.** A scanner reads the source: `fs.readFile`,
 `fetch`, `eval`, obfuscation. But code can be obfuscated, can behave differently
 by environment, can fetch a second-stage payload, and can hide the behaviour in a
-dependency. Traceback observes what the package _did_ when it ran. The two signals
-combine well; this is the dynamic half.
+dependency. Traceback leads with what the package _did_ when it ran.
+
+It does read the source too, for the one thing behaviour cannot cover: a package
+that detects the sandbox and stays dormant produces nothing to observe. So the
+hook's source is scanned for capability, and the interesting cell is
+**capability present, never exercised, source concealed** — the shape of a
+payload waiting for a real host. That raises `allow` to `review`, never to
+`block`; behaviour wins whenever the two disagree.
 
 ## How you'd actually use it
 
@@ -210,17 +216,18 @@ What's missing is the plumbing that puts that gate in front of _your_ everyday
 
 Worth being precise about, since "AI security demo" invites suspicion:
 
-| Component                       | Status                                                                                                                |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| The attack                      | **Simulated** in a disposable Modal sandbox, using a synthetic canary. No real credential or system is touched.       |
-| The telemetry                   | **Real** — actual processes, real parent/child pids, real file I/O, a real outbound request, timestamped when it ran. |
-| The correlation                 | **Real**, deterministic, unit-tested including negative cases.                                                        |
-| The canary proof                | **Real** — a collector we control confirms what it received, so the proof does not rest on a third party.             |
-| The verdict                     | **Real**, rule-based and reproducible.                                                                                |
-| The timeline prose              | **Written by an LLM**, constrained as above. Falls back to a rule engine with no API key.                             |
-| Syscall capture                 | **Not built.** Telemetry is self-reported by the simulation, not captured from the kernel.                            |
-| `--ignore-scripts` interception | **Not built.** The sandbox path is real; local interception is the next step.                                         |
-| Authentication                  | **Not built.** Suitable for local evaluation, not deployment.                                                         |
+| Component                       | Status                                                                                                                             |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| The attack                      | **Simulated** in a disposable Modal sandbox, using a synthetic canary. No real credential or system is touched.                    |
+| The telemetry                   | **Real** — actual processes, real parent/child pids, real file I/O, a real outbound request, timestamped when it ran.              |
+| The correlation                 | **Real**, deterministic, unit-tested including negative cases.                                                                     |
+| The canary proof                | **Real** — a collector we control confirms what it received, so the proof does not rest on a third party.                          |
+| The verdict                     | **Real**, rule-based and reproducible.                                                                                             |
+| The timeline prose              | **Written by an LLM**, constrained as above. Falls back to a rule engine with no API key.                                          |
+| Syscall capture                 | **Real for `/api/inspect`** — `strace` on `execve`/`openat`/`read`/`connect`. The fixture path (`/api/simulate`) is self-reported. |
+| Static capability analysis      | **Real** — hook source is scanned; findings cite the literal fragment matched, and can only escalate to `review`.                  |
+| `--ignore-scripts` interception | **Not built.** The sandbox path is real; local interception is the next step.                                                      |
+| Authentication                  | **Not built.** Suitable for local evaluation, not deployment.                                                                      |
 
 ## Where it's weak
 
@@ -231,9 +238,12 @@ point:
   package that encrypts or encodes what it sends, the canary would not appear and
   exfiltration would fall back to an INFERENCE — the system under-claims rather
   than over-claims, which is the correct direction to fail.
-- **Telemetry is self-reported by the simulation**, not captured from the kernel.
-  `strace` syscall capture (`openat` / `read` / `connect`) is the next step and
-  would make the evidence independent of the script's own account of itself.
+- **A sandbox-aware package that stays quiet is only partly covered.** Static
+  analysis catches it when the source is also concealed; a dormant payload
+  written in plain, readable JavaScript still passes.
+- **Detection is not blocking.** The verdict only arrives in time if the gate
+  runs _before_ `npm install`. Run the install directly and the hook has already
+  executed — that is a deployment property, not a detection one.
 - **MITRE ATT&CK mappings are approximate** — orientation for a reader, not
   suitable for formal reporting.
 - **Correlation windows are tuned to this scenario** (2s exfiltration, 30s
@@ -293,10 +303,9 @@ Status and roadmap: **[docs/todo.md](docs/todo.md)**
 
 ## What's next
 
-- **`npm install --ignore-scripts` interception** — detect lifecycle scripts from
-  `package.json` and inspect them before anything executes locally.
-- **`strace` syscall capture** so evidence comes from the kernel rather than from
-  the script being observed.
+- **`npm install --ignore-scripts` interception** — the piece that turns this
+  from detection into prevention: hold the local install, inspect, then release.
+- Recurse into transitive dependencies, not just the named package's own hooks.
 - Authentication on `/api/*`, required before any deployment.
 - Ingestion adapters for real EDR and SIEM sources — the pipeline consumes
   normalised events, so this is an adapter, not a rewrite.
